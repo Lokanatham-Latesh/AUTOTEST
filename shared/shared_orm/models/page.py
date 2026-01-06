@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import Integer, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.mysql import JSON
-from app.db.base import Base
+from shared_orm.db.base import Base
 
 # The XLSX shows a pipeline-like status. Use representative states as enum members.
 PageStatusEnum = Enum("new", "generating_metadata", "generating_test_scenarios", "generating_test_cases", "test_cases_generated", "generating_test_scripts", "done", name="page_status")

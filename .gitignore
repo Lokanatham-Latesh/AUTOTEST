@@ -34,3 +34,5 @@ wheels/
 data/
 .history
 .idea
+*.egg-info/
+.eggs/

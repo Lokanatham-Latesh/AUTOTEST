@@ -1,7 +1,7 @@
 from __future__ import annotations
 from sqlalchemy import Integer, String, Enum, DateTime, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.base import Base
+from shared_orm.db.base import Base
 from datetime import datetime
 
 is_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import Integer, String, DateTime, ForeignKey, Enum, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.base import Base
+from shared_orm.db.base import Base
 # from app.models.user import User
 # XLSX enum: Text, Number, Date, Dropdown, Radio Button, Checkbox
 SettingTypeEnum = Enum(

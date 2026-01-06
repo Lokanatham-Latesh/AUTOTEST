@@ -2,7 +2,6 @@ import asyncio
 import signal
 from app.config.rabbitmq import rabbitmq_connection
 from app.services.rabbitmq_consumer import RabbitMQConsumer
-from app.workers.worker import worker_service
 from app.config.logger import logger
 from app.workers.queue_router import QUEUE_HANDLER_MAP
  

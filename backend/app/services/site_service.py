@@ -1,16 +1,18 @@
+import asyncio
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, asc, desc
 from fastapi import HTTPException, status
 from datetime import datetime
 
-from app.models.site import Site
+from shared_orm.models.site import Site
 from app.schemas.site_schema import SiteCreate, SiteUpdate
-from app.models.user import User
+from shared_orm.models.user import User
 from app.messaging.rabbitmq_producer import rabbitmq_producer
+from app.config.setting import settings
 
 class SiteService:
 
-    def create_site(self, data: SiteCreate, db: Session, user: User) -> Site:
+    async def create_site(self, data: SiteCreate, db: Session, user: User) -> Site:
         existing = db.query(Site).filter(Site.site_url == data.site_url).first()
         if existing:
             raise HTTPException(
@@ -20,6 +22,7 @@ class SiteService:
 
         site = Site(
             site_title=data.site_title,
+            status ="New",
             site_url=str(data.site_url),
             created_on=datetime.utcnow(),
             created_by= user.id
@@ -28,6 +31,20 @@ class SiteService:
         db.add(site)
         db.commit()
         db.refresh(site)
+        message = {
+            "event": "PAGE_EXTRACT",
+            "site_id": site.id,
+            "site_url": site.site_url,
+            "requested_by": user.id,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        asyncio.create_task(
+            rabbitmq_producer.publish_message(
+                queue_name=settings.PAGE_EXTRACT_QUEUE,
+                message=message,
+                priority=5,
+            )
+        )
         return site
 
     def get_sites(
@@ -95,59 +112,59 @@ class SiteService:
         db.delete(site)
         db.commit()
         
-    async def analyse_site(
-        self,
-        site_id: int,
-        db: Session,
-        current_user: User,
-    ) -> None:
-        """
-        Analyse a site:
-        - Validate site exists
-        - Update site status to Processing
-        - Publish analyse message to RabbitMQ
-        """
+    # async def analyse_site(
+    #     self,
+    #     site_id: int,
+    #     db: Session,
+    #     current_user: User,
+    # ) -> None:
+    #     """
+    #     Analyse a site:
+    #     - Validate site exists
+    #     - Update site status to Processing
+    #     - Publish analyse message to RabbitMQ
+    #     """
 
-        site = db.query(Site).filter(Site.id == site_id).first()
+    #     site = db.query(Site).filter(Site.id == site_id).first()
 
-        if not site:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Site not found"
-            )
+    #     if not site:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_404_NOT_FOUND,
+    #             detail="Site not found"
+    #         )
 
-        # Optional: prevent duplicate analyse
-        if site.status == "Processing":
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Site is already being analysed"
-            )
+    #     # Optional: prevent duplicate analyse
+    #     if site.status == "Processing":
+    #         raise HTTPException(
+    #             status_code=status.HTTP_409_CONFLICT,
+    #             detail="Site is already being analysed"
+    #         )
 
-        # Message payload
-        message = {
-            "event": "SITE_ANALYSE",
-            "site_id": site.id,
-            "site_url": site.site_url,
-            "requested_by": current_user.id,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
+    #     # Message payload
+    #     message = {
+    #         "event": "SITE_ANALYSE",
+    #         "site_id": site.id,
+    #         "site_url": site.site_url,
+    #         "requested_by": current_user.id,
+    #         "timestamp": datetime.utcnow().isoformat(),
+    #     }
 
-        published = await rabbitmq_producer.publish_message(
-            queue_name="site_analyse_queue",
-            message=message,
-            priority=5,
-        )
+    #     published = await rabbitmq_producer.publish_message(
+    #         queue_name="site_analyse_queue",
+    #         message=message,
+    #         priority=5,
+    #     )
 
-        if not published:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to queue site for analysis"
-            )
-        # Update site status
-        site.status = "Processing"
-        site.updated_on = datetime.utcnow()
-        site.updated_by = current_user.id
+    #     if not published:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    #             detail="Failed to queue site for analysis"
+    #         )
+    #     # Update site status
+    #     site.status = "Processing"
+    #     site.updated_on = datetime.utcnow()
+    #     site.updated_by = current_user.id
 
-        db.commit()
+    #     db.commit()
         
-        return {site,published}
+    #     return {site,published}

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Button } from '@/components/ui/button'
 import { SiteTable } from '@/components/site/SiteTable'
+import { toast } from 'sonner'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Pagination } from '@/components/common/Pagination'
 import { useSitesQuery, useCreateSiteMutation } from '@/utils/queries/sitesQuery'
@@ -26,11 +27,21 @@ const Dashboard: React.FC = React.memo(() => {
   })
 
   const handleAdd = (values: { title: string; url: string }) => {
-    createSiteMutation.mutate({
-      site_title: values.title,
-      site_url: values.url,
-    })
-    setOpenAdd(false)
+    createSiteMutation.mutate(
+      {
+        site_title: values.title,
+        site_url: values.url,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Site created successfully')
+          setOpenAdd(false)
+        },
+        onError: (error: any) => {
+          toast.error(error?.response?.data?.detail || 'Site creation failed')
+        },
+      },
+    )
   }
 
   return (

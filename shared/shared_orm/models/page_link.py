@@ -1,9 +1,8 @@
 from __future__ import annotations
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.base import Base
-from app.models.page import Page
-# from app.models.test_scenario import TestScenario
+from shared_orm.db.base import Base
+from shared_orm.models.page import Page
 
 
 class PageLink(Base):

@@ -1,0 +1,9 @@
+[project]
+name = "shared-orm"
+version = "0.1.0"
+description = "Shared SQLAlchemy ORM models for backend and worker services"
+requires-python = ">=3.10"
+
+dependencies = [
+  "sqlalchemy>=2.0,<3.0"
+]
