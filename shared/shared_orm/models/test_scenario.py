@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Integer, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.mysql import JSON
-from app.db.base import Base
+from shared_orm.db.base import Base
 # from app.models.page import Page
 
 # Enums per XLSX

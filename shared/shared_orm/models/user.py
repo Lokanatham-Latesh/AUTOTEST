@@ -1,6 +1,6 @@
 from sqlalchemy import Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.base import Base
+from shared_orm.db.base import Base
 
 class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

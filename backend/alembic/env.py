@@ -8,11 +8,11 @@ from sqlalchemy.sql.schema import Constraint, ForeignKeyConstraint, Column
 from sqlalchemy import Integer, String, Boolean, ForeignKey 
 from sqlalchemy import engine_from_config # Already imported, can remove duplicate
 from alembic import context
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'app'))
-
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.append(BASE_DIR)
 from app.config.setting import settings
-from app.db.base import Base
-
+from shared_orm.db.base import Base
+import shared_orm.models
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

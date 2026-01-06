@@ -2,19 +2,36 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# # RUN apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-  gcc \
-  default-libmysqlclient-dev \
-  pkg-config \
-  && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-driver \
+    fonts-liberation \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libgbm1 \
+    libxshmfence1 \
+    libdrm2 \
+    libxdamage1 \
+    libxrandr2 \
+    libu2f-udev \
+    libvulkan1 \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy shared FIRST
+COPY shared /app/shared
 
-ENV PYTHONPATH=/app
+# Copy llm service code
+COPY llm-service /app/llm-service
+
+# Install deps
+RUN pip install --upgrade pip \
+    && pip install -r /app/llm-service/requirements.txt
+
+# Set working directory to app root
+WORKDIR /app/llm-service
 
 CMD ["python", "main.py"]

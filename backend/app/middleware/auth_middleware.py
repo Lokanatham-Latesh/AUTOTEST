@@ -1,7 +1,7 @@
 from fastapi import Request, HTTPException, Depends, Response
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.user import User
+from shared_orm.models.user import User
 from app.config.security import security_service
 import jwt
 

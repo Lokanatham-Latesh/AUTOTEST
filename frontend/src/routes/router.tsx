@@ -5,6 +5,12 @@ import { SidebarProvider } from '@/contexts/SidebarContext'
 import RootProvider from '../providers/RootProvider'
 import PublicRoute from './PublicRoute'
 import SiteInfoWrapper from '@/components/site/SiteInfoWrapper'
+import User from '@/pages/User'
+import Setting from '@/pages/Setting'
+import TestScenario from '@/components/site/TestScenario'
+import TestSuite from '@/components/site/TestSuite'
+import Configration from '@/components/site/Configuration'
+import Scheduled from '@/components/site/Schedule'
 
 const Layout = lazy(() => import('@/components/layout/Layout'))
 const ProtectedRoute = lazy(() => import('./ProtectedRoute'))
@@ -69,12 +75,12 @@ export const router = createBrowserRouter([
           },
           {
             path: 'user',
-            element: <Page />,
+            element: <User />,
             handle: { sidebarId: 'user' },
           },
           {
             path: 'settings',
-            element: <Page />,
+            element: <Setting />,
             handle: { sidebarId: 'settings' },
           },
           {
@@ -93,22 +99,22 @@ export const router = createBrowserRouter([
               },
               {
                 path: ':id/test-scenario',
-                element: <Page />,
+                element: <TestScenario />,
                 handle: { sidebarId: 'test-scenario' },
               },
               {
                 path: ':id/test-suite',
-                element: <Page />,
+                element: <TestSuite />,
                 handle: { sidebarId: 'test-suite' },
               },
               {
                 path: ':id/configuration',
-                element: <Page />,
+                element: <Configration />,
                 handle: { sidebarId: 'configuration' },
               },
               {
                 path: ':id/schedule',
-                element: <Page />,
+                element: <Scheduled />,
                 handle: { sidebarId: 'schedule-test' },
               },
             ],

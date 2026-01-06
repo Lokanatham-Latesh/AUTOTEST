@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     SITE_ANALYSE_QUEUE: str
     PAGE_EXTRACT_QUEUE: str
     LLM_QUEUE: str
+    PAGE_CRAWL_MAX_DEPTH: int = 2
+
 
     model_config = SettingsConfigDict(
         env_file=".env",

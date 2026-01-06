@@ -10,7 +10,7 @@ from app.schemas.site_schema import (
 )
 from app.services.site_service import SiteService
 from app.middleware.auth_middleware import auth_required
-from app.models.user import User
+from shared_orm.models.user import User
 
 router = APIRouter(prefix="/sites", tags=["Sites"])
 site_service = SiteService()
@@ -23,7 +23,7 @@ site_service = SiteService()
     summary="Create a new site",
     description="Create a new site for the authenticated user."
 )
-def create_site(
+async def create_site(
     data: SiteCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_required)
@@ -37,7 +37,7 @@ def create_site(
 
     Only authenticated users can create sites.
     """
-    return site_service.create_site(data, db, current_user)
+    return await site_service.create_site(data, db, current_user)
 
 
 @router.get(
@@ -130,21 +130,21 @@ def delete_site(
     site_service.delete_site(site_id, db, current_user)
 
 
-@router.post(
-    "/analyse/{site_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Analyse site",
-    description="Trigger analysis for a site (background processing)."
-)
-async def analyse_site(
-    site_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(auth_required),
-):
-    """
-    Starts analysis for the given site.
+# @router.post(
+#     "/analyse/{site_id}",
+#     status_code=status.HTTP_204_NO_CONTENT,
+#     summary="Analyse site",
+#     description="Trigger analysis for a site (background processing)."
+# )
+# async def analyse_site(
+#     site_id: int,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(auth_required),
+# ):
+#     """
+#     Starts analysis for the given site.
 
-    - **site_id**: ID of the site
-    - Runs asynchronously
-    """
-    await site_service.analyse_site(site_id, db, current_user)
+#     - **site_id**: ID of the site
+#     - Runs asynchronously
+#     """
+#     await site_service.analyse_site(site_id, db, current_user)

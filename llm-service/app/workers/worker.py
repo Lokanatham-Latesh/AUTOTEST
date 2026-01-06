@@ -1,4 +1,17 @@
+from datetime import datetime
+from urllib.parse import urlparse
+
 from app.config.logger import logger
+from app.config.database import get_db
+from app.services.selenium_driver import get_driver
+from app.extractor.url_extractor import URLExtractor
+from app.config.setting import settings
+
+from shared_orm.models.site import Site
+from shared_orm.models.page import Page
+from shared_orm.models.site_alias import SiteAlias
+from app.config.database import SessionLocal
+
 
 
 class WorkerService:
@@ -6,74 +19,122 @@ class WorkerService:
     async def process_site_analyse(self, body: dict):
         """
         Handles SITE_ANALYSE_QUEUE
-
-        Example responsibilities:
-        - Validate input
-        - Save site info
-        - Trigger page extraction
+        Currently just forwards to PAGE_EXTRACT flow
         """
-        try:
-            logger.info(f"[SITE_ANALYSE] Started | payload={body}")
+        logger.info(f"[SITE_ANALYSE] Started | payload={body}")
 
-            site_id = body.get("site_id")
-            url = body.get("url")
+        site_id = body.get("site_id")
+        site_url = body.get("site_url")
 
-            if not site_id or not url:
-                raise ValueError("site_id or url missing")
+        if not site_id or not site_url:
+            raise ValueError("site_id or site_url missing")
 
-           
-
-        except Exception as e:
-            logger.exception(f"[SITE_ANALYSE] Failed | error={e}")
-            raise
-
+        # No DB update here
+        # Real work happens in PAGE_EXTRACT
+        logger.info(f"[SITE_ANALYSE] Queued site_id={site_id} for extraction")
 
     async def process_page_extract(self, body: dict):
         """
         Handles PAGE_EXTRACT_QUEUE
-
-        Example responsibilities:
-        - Extract content from pages
-        - Clean HTML
-        - Store extracted text
+        Extracts pages and updates DB
         """
+        logger.info(f"[PAGE_EXTRACT] Started | payload={body}")
+
+        site_id = body.get("site_id")
+        site_url = body.get("site_url")
+        requested_by = body.get("requested_by")
+
+        if not site_id or not site_url:
+            raise ValueError("site_id or site_url missing")
+
+        db = SessionLocal()
+
         try:
-            logger.info(f"[PAGE_EXTRACT] Started | payload={body}")
+            site = db.query(Site).filter(Site.id == site_id).first()
+            if not site:
+                logger.warning("Site not found")
+                return
 
-            page_id = body.get("page_id")
-            page_url = body.get("page_url")
+            if site.status == "Pause":
+                logger.info("Site paused before extraction")
+                return
 
-            if not page_id or not page_url:
-                raise ValueError("page_id or page_url missing")
+            site.status = "Processing"
+            site.updated_on = datetime.utcnow()
+            site.updated_by = requested_by
+            db.commit()
+
+            driver = get_driver()
+            extractor = URLExtractor(driver, logger)
+
+            try:
+                urls = extractor.extract_urls(site_url, max_depth=settings.PAGE_CRAWL_MAX_DEPTH)
+                base_domain = urlparse(site_url).netloc
+
+                for url in urls:
+                    db.refresh(site)
+                    if site.status == "Pause":
+                        logger.info("Site paused during extraction")
+                        return
+
+                    exists = db.query(Page).filter(Page.page_url == url).first()
+                    if not exists:
+                        db.add(
+                            Page(
+                                site_id=site.id,
+                                page_url=url,
+                                status="new",
+                                created_on=datetime.utcnow(),
+                                created_by=requested_by,
+                            )
+                        )
+
+                    parsed = urlparse(url)
+                    if parsed.netloc != base_domain:
+                        alias_exists = db.query(SiteAlias).filter(
+                            SiteAlias.site_id == site.id,
+                            SiteAlias.site_alias_url == parsed.netloc
+                        ).first()
+
+                        if not alias_exists:
+                            db.add(
+                                SiteAlias(
+                                    site_id=site.id,
+                                    site_alias_url=parsed.netloc
+                                )
+                            )
+
+                db.commit()
+
+                site.status = "Done"
+                site.updated_on = datetime.utcnow()
+                db.commit()
+
+                logger.info(f"[PAGE_EXTRACT] Completed | site_id={site.id}")
+
+            finally:
+                driver.quit()
 
         except Exception as e:
             logger.exception(f"[PAGE_EXTRACT] Failed | error={e}")
             raise
 
+        finally:
+            db.close()
 
     async def process_llm_task(self, body: dict):
         """
         Handles LLM_QUEUE
-
-        Example responsibilities:
-        - Build prompt
-        - Call LLM
-        - Save response
+        (Future implementation)
         """
-        try:
-            logger.info(f"[LLM] Started | payload={body}")
+        logger.info(f"[LLM] Started | payload={body}")
 
-            task_id = body.get("task_id")
-            content = body.get("content")
+        task_id = body.get("task_id")
+        content = body.get("content")
 
-            if not task_id or not content:
-                raise ValueError("task_id or content missing")
+        if not task_id or not content:
+            raise ValueError("task_id or content missing")
 
-
-
-        except Exception as e:
-            logger.exception(f"[LLM] Failed | error={e}")
-            raise
-
+        logger.info(f"[LLM] Task received | task_id={task_id}")
 
 worker_service = WorkerService()

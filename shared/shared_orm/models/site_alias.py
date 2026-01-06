@@ -1,7 +1,7 @@
 
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.base import Base
+from shared_orm.db.base import Base
 # from app.models.site import Site
 
 class SiteAlias(Base):

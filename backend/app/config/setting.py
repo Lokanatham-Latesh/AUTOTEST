@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     RABBITMQ_VHOST: str = "/"
     RABBITMQ_HOST: str = "autotest_rabbitmq"
     RABBITMQ_PORT: str = "5672:5672"
+    SITE_ANALYSE_QUEUE: str
+    PAGE_EXTRACT_QUEUE: str
+    LLM_QUEUE: str
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

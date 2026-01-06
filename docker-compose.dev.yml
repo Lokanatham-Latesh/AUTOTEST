@@ -73,8 +73,8 @@ services:
     env_file:
       - .env
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     image: autotest_fastapi_backend
     ports:
       - ${BACKEND_PORT}
@@ -94,8 +94,8 @@ services:
     env_file:
       - .env
     build:
-      context: ./llm-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: llm-service/Dockerfile
     image: autotest_worker_backend
     depends_on:
       autotest_mysql:

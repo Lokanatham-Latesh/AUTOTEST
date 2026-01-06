@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from app.schemas.auth_schema import RegisterRequest, RegisterResponse,LoginRequest,LoginResponse
-from app.models.user import User
-from app.models.role import Role
+from shared_orm.models.user import User
+from shared_orm.models.role import Role
 from app.config.security import security_service   
 from fastapi import HTTPException, status, Response, Request
 from app.config.setting import settings

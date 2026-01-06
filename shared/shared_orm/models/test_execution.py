@@ -4,7 +4,7 @@ from xmlrpc.client import Boolean
 # from backend.app.models.test_scenario import TestScenario
 from sqlalchemy import Integer, String, Enum, DateTime, ForeignKey, JSON, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.db.base import Base
+from shared_orm.db.base import Base
 from datetime import datetime
 
 TestExecutionStatusEnum = Enum("NOne", "Passed", "Partially Passed", "Failed")

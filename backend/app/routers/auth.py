@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from fastapi import Response, Request
-from app.models.user import User
+from shared_orm.models.user import User
 
 from app.schemas.auth_schema import RegisterRequest, RegisterResponse,LoginRequest, LoginResponse
 from app.services.auth_service import auth_service
