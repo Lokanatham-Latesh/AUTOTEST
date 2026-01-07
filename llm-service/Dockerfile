@@ -28,8 +28,11 @@ COPY shared /app/shared
 COPY llm-service /app/llm-service
 
 # Install deps
-RUN pip install --upgrade pip \
-    && pip install -r /app/llm-service/requirements.txt
+# RUN pip install --upgrade pip \
+#     && pip install -r /app/llm-service/requirements.txt
+
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install --use-deprecated=legacy-resolver -r /app/llm-service/requirements.txt
 
 # Set working directory to app root
 WORKDIR /app/llm-service

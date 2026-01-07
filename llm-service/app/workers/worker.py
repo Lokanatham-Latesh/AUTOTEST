@@ -2,16 +2,18 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 from app.config.logger import logger
-from app.config.database import get_db
 from app.services.selenium_driver import get_driver
 from app.extractor.url_extractor import URLExtractor
+from app.services.page_analysis_service import PageAnalysisService
+from app.llm.llm_wrapper import LLMWrapper
+from app.llm.prompt_manager import PromptManager
 from app.config.setting import settings
+from app.messaging.rabbitmq_producer import rabbitmq_producer
 
 from shared_orm.models.site import Site
 from shared_orm.models.page import Page
 from shared_orm.models.site_alias import SiteAlias
 from app.config.database import SessionLocal
-
 
 
 class WorkerService:
@@ -112,6 +114,20 @@ class WorkerService:
 
                 logger.info(f"[PAGE_EXTRACT] Completed | site_id={site.id}")
 
+                # emiting the PAGE_ANALYSE event
+                message = {
+                    "event": "PAGE_ANALYSE",
+                    "site_id": site.id,
+                    "requested_by": requested_by,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+                await rabbitmq_producer.publish_message(
+                    queue_name=settings.PAGE_ANALYSE_QUEUE,
+                    message=message,
+                    priority=5,
+                )
+
             finally:
                 driver.quit()
 
@@ -136,5 +152,51 @@ class WorkerService:
             raise ValueError("task_id or content missing")
 
         logger.info(f"[LLM] Task received | task_id={task_id}")
+
+    
+    async def process_page_analyse(self, body: dict):
+        """
+        Handles PAGE_ANALYSE_QUEUE
+        Extracts pages and updates DB
+        """
+        logger.info(f"[PAGE_ANALYSE_QUEUE] Started | payload={body}")
+
+        site_id = body.get("site_id")
+        requested_by = body.get("requested_by")
+
+        db = SessionLocal()
+        driver = get_driver()
+
+        try:
+            while True:
+                page = (
+                    db.query(Page)
+                    .filter(Page.site_id == site_id, Page.status == "new")
+                    .with_for_update(skip_locked=True)
+                    .first()
+                )
+
+                if not page:
+                    break
+
+                page.status = "generating_metadata"
+                db.commit()
+
+                try:
+                    analyzer.analyze_page(
+                        page_id=page.id,
+                        page_url=page.page_url,
+                        requested_by=requested_by
+                    )
+                    page.status = "generating_metadata"
+                    db.commit()
+
+                except Exception:
+                    page.status = "new"
+                    db.commit()
+
+        finally:
+            driver.quit()
+            db.close()
 
 worker_service = WorkerService()

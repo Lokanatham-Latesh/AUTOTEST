@@ -12,6 +12,7 @@ autotest_package/test_scripts
 autotest_package/logs
 autotest_package/autotest/db/autotest.db
 logs
+logs-worker
 __pycache__/
 *.py[cod]
 *$py.class

@@ -10,31 +10,38 @@ cryptography==42.0.0
 
 # RabbitMQ
 aio-pika==9.3.1
-# aiormq==6.8.0
 
-# Pydantic for data validation
+# Pydantic
 pydantic-settings==2.12.0
 pydantic[email]==2.12.0
-# Environment variables
 python-dotenv==1.0.0
-# Logging and monitoring
+
+# Logging
 python-json-logger==2.0.7
 
-# Testing (optional)
+# Utilities
+python-dateutil==2.8.2
+pyyaml==6.0.2
+jsonschema==4.23.0
+tldextract==5.3.0
+bs4==0.0.2
+pillow==11.1.0
+
+# Browser automation
+playwright==1.42.0
+selenium==4.15.2
+webdriver-manager==4.0.2
+pyppeteer==2.0.0
+
+# Testing (optional for workers)
 pytest==7.4.4
 pytest-asyncio==0.23.3
 httpx==0.26.0
 
-# Utilities
-python-dateutil==2.8.2
-
-pillow==11.1.0
-playwright==1.42.0
-tldextract==5.3.0
-selenium==4.15.2
-webdriver-manager==4.0.2
-pillow==11.1.0
-jsonschema==4.23.0
-pyppeteer==2.0.0
-pyyaml==6.0.2
-bs4==0.0.2
+# LangChain + providers
+langchain
+langchain-openai
+langchain-groq
+langchain-google-genai
+langchain-anthropic
+langchain-ollama
