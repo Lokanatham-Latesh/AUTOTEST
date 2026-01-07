@@ -1,5 +1,5 @@
-from pydantic_settings import BaseSettings
-from typing import List
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List, ClassVar
 
 class Settings(BaseSettings):
     # Project Metadata Settings
@@ -27,14 +27,15 @@ class Settings(BaseSettings):
     RABBITMQ_VHOST: str = "/"
     RABBITMQ_HOST: str = "autotest_rabbitmq"
     RABBITMQ_PORT: str = "5672:5672"
-    SITE_ANALYSE_QUEUE: str
-    PAGE_EXTRACT_QUEUE: str
-    PAGE_ANALYSE_QUEUE: str
-    LLM_QUEUE: str
+    SITE_ANALYSE_QUEUE: str = "site_analyse_queue"
+    PAGE_ANALYSE_QUEUE: ClassVar[str] = "page_analyse_queue"
+    PAGE_EXTRACT_QUEUE: str = "page_extract_queue"
+    LLM_QUEUE: str = "llm_queue"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "allow"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_ignore_class_vars=True,
+        extra="allow",
+    )
 
 settings = Settings()
