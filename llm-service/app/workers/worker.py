@@ -5,7 +5,6 @@ from app.config.logger import logger
 from app.config.database import get_db
 from app.services.selenium_driver import get_driver
 from app.extractor.url_extractor import URLExtractor
-from app.config.setting import settings
 
 from shared_orm.models.site import Site
 from shared_orm.models.page import Page
@@ -68,7 +67,7 @@ class WorkerService:
             extractor = URLExtractor(driver, logger)
 
             try:
-                urls = extractor.extract_urls(site_url, max_depth=settings.PAGE_CRAWL_MAX_DEPTH)
+                urls = extractor.extract_urls(site_url)
                 base_domain = urlparse(site_url).netloc
 
                 for url in urls:
@@ -83,7 +82,7 @@ class WorkerService:
                             Page(
                                 site_id=site.id,
                                 page_url=url,
-                                status="new",
+                                status="New",
                                 created_on=datetime.utcnow(),
                                 created_by=requested_by,
                             )
