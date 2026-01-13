@@ -19,14 +19,15 @@ const Dashboard: React.FC = React.memo(() => {
   const [pageSize, setPageSize] = React.useState(10)
 
   const createSiteMutation = useCreateSiteMutation()
-  const {
+  const { sendMessage, lastMessage, isConnected, connectionState } = useWebSocketContext()
+
+  console.log(
+    'sendMessagelastMessageisConnectedconnectionState',
     sendMessage,
     lastMessage,
     isConnected,
     connectionState,
-  } = useWebSocketContext();
-
-  console.log("sendMessagelastMessageisConnectedconnectionState", sendMessage,lastMessage,isConnected,connectionState)
+  )
 
   const { data, isLoading } = useSitesQuery({
     page,
@@ -46,8 +47,9 @@ const Dashboard: React.FC = React.memo(() => {
           toast.success('Site created successfully')
           setOpenAdd(false)
         },
-        onError: (error: any) => {
-          toast.error(error?.response?.data?.detail || 'Site creation failed')
+        onError: (error: unknown) => {
+          const err = error as { response?: { data?: { detail?: string } } }
+          toast.error(err?.response?.data?.detail || 'Site creation failed')
         },
       },
     )

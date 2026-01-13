@@ -3,8 +3,6 @@ import { siteApi } from '../apis/siteApi'
 import type { CreateSitePayload } from '../apis/siteApi'
 import type { SortType } from '@/types'
 
-
-
 export const useSitesQuery = ({
   page,
   limit,
@@ -83,7 +81,6 @@ export const useCreateSiteMutation = () => {
     },
   })
 }
-
 
 export const useSitePagesQuery = ({
   siteId,

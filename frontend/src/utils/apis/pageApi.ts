@@ -1,6 +1,5 @@
 import api from '../axios'
 
-
 export type Page = {
   id: number
   site_id: number | null

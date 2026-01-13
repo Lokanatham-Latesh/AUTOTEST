@@ -7,13 +7,14 @@ import PublicRoute from './PublicRoute'
 import SiteInfoWrapper from '@/components/site/SiteInfoWrapper'
 import User from '@/pages/User'
 import Setting from '@/pages/Setting'
-import TestScenario from '@/components/site/TestScenario'
+import TestScenario from '@/components/testScenario/TestScenario'
 import TestSuite from '@/components/site/TestSuite'
 import Configration from '@/components/site/Configuration'
 import Scheduled from '@/components/site/Schedule'
 import PageInfoWrapper from '@/components/page/PageInfoWrapper'
 import PageInfoPage from '@/components/page/PageInfoPage'
 import SitePages from '@/components/site/SitePages'
+import TestScenarioDetail from '@/components/testScenario/TestScenarioDetail'
 
 const Layout = lazy(() => import('@/components/layout/Layout'))
 const ProtectedRoute = lazy(() => import('./ProtectedRoute'))
@@ -124,6 +125,14 @@ export const router = createBrowserRouter([
               {
                 path: ':id/test-scenario',
                 element: <TestScenario />,
+                handle: {
+                  sidebarId: 'test-scenario',
+                  title: 'Test Scenarios',
+                },
+              },
+              {
+                path: ':id/test-scenario/:tsid',
+                element: <TestScenarioDetail />,
                 handle: {
                   sidebarId: 'test-scenario',
                   title: 'Test Scenarios',
