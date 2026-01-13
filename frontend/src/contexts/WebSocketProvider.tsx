@@ -1,75 +1,108 @@
-import React, { createContext, useContext, useMemo, useCallback, useRef, useEffect } from "react";
-import useWebSocket, { ReadyState, type Options } from "react-use-websocket";
+import React, { createContext, useContext, useCallback, useEffect, useRef } from 'react'
+import useWebSocket, { ReadyState, type Options } from 'react-use-websocket'
 
-import { WS_CONFIG } from "@/config/websocket";
-import type { WSBaseMessage, WSMessageType } from "@/types/websocket";
+import { WS_CONFIG } from '@/config/websocket'
+import type { WSBaseMessage, WSMessageType } from '@/types/websocket'
+import { useAuth } from '@/contexts/AuthContext'
 
-// const WS_URL = "ws://localhost:8000/api/v1/ws";
-const WS_URL = import.meta.env.VITE_WS_URL;
+// const WS_URL = import.meta.env.VITE_WS_URL;
+const WS_URL = 'ws://localhost:8000/api/v1/ws'
 
 type WSContextType = {
-  sendMessage: <T>(type: WSMessageType, payload: T) => void;
-  lastMessage: WSBaseMessage | null;
-  connectionState: ReadyState;
-  isConnected: boolean;
-};
+  sendMessage: <T>(type: WSMessageType, payload: T) => void
+  lastMessage: WSBaseMessage | null
+  connectionState: ReadyState
+  isConnected: boolean
+}
 
-const WSContext = createContext<WSContextType | null>(null);
+const WSContext = createContext<WSContextType | null>(null)
 
 export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const lastJsonMessageRef = useRef<WSBaseMessage | null>(null);
-  const heartbeatIntervalRef = useRef<number | null>(null);
+  const { isAuthenticated } = useAuth()
+  const heartbeatIntervalRef = useRef<number | null>(null)
 
-  const socketOptions: Options = useMemo(() => ({
-    shouldReconnect: () => true,
+  const socketOptions: Options = {
+    shouldReconnect: () => isAuthenticated,
     reconnectAttempts: WS_CONFIG.reconnectAttempts,
     reconnectInterval: WS_CONFIG.reconnectInterval,
 
     onOpen: () => {
-      console.info("WebSocket connected");
-      
-      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
-      heartbeatIntervalRef.current = setInterval(() => {
-        if (wsReadyStateRef.current === ReadyState.OPEN) {
-          sendJsonMessage({ type: "PING", payload: {}, timestamp: Date.now() });
-        }
-      }, WS_CONFIG.heartbeatInterval);
+      console.log('WebSocket connected')
+
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+      }
+
+      heartbeatIntervalRef.current = window.setInterval(() => {
+        sendJsonMessage({
+          type: 'PING',
+          payload: {},
+          timestamp: Date.now(),
+        })
+      }, WS_CONFIG.heartbeatInterval)
     },
 
-    onClose: (event) => {
-      console.warn("WebSocket disconnected", event);
-      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+    onClose: () => {
+      console.log('WebSocket disconnected')
+
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+        heartbeatIntervalRef.current = null
+      }
     },
 
-    onError: (event) => console.error("WebSocket error:", event),
+    onError: (error) => {
+      console.error('WebSocket error:', error)
+    },
+  }
 
-    filter: () => true,
-  }), []);
+  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(
+    isAuthenticated ? WS_URL : null,
+    socketOptions,
+  )
 
-  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(WS_URL, socketOptions);
+  // Cleanup heartbeat on unmount
+  useEffect(() => {
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+      }
+    }
+  }, [])
 
-  const wsReadyStateRef = useRef(readyState);
-  useEffect(() => { wsReadyStateRef.current = readyState; }, [readyState]);
+  const sendMessage = useCallback(
+    <T,>(type: WSMessageType, payload: T) => {
+      if (readyState === ReadyState.OPEN) {
+        sendJsonMessage({
+          type,
+          payload,
+          timestamp: Date.now(),
+        })
+      } else {
+        console.warn('WebSocket is not connected. Message not sent:', type)
+      }
+    },
+    [sendJsonMessage, readyState],
+  )
 
-  useEffect(() => { lastJsonMessageRef.current = lastJsonMessage as WSBaseMessage | null; }, [lastJsonMessage]);
-
-  const sendMessage = useCallback(<T,>(type: WSMessageType, payload: T) => {
-    const message: WSBaseMessage<T> = { type, payload, timestamp: Date.now() };
-    sendJsonMessage(message);
-  }, [sendJsonMessage]);
-
-  const value: WSContextType = {
-    sendMessage,
-    lastMessage: lastJsonMessageRef.current,
-    connectionState: readyState,
-    isConnected: readyState === ReadyState.OPEN,
-  };
-
-  return <WSContext.Provider value={value}>{children}</WSContext.Provider>;
-};
+  return (
+    <WSContext.Provider
+      value={{
+        sendMessage,
+        lastMessage: lastJsonMessage as WSBaseMessage | null,
+        connectionState: readyState,
+        isConnected: readyState === ReadyState.OPEN,
+      }}
+    >
+      {children}
+    </WSContext.Provider>
+  )
+}
 
 export const useWebSocketContext = (): WSContextType => {
-  const ctx = useContext(WSContext);
-  if (!ctx) throw new Error("useWebSocketContext must be used inside WebSocketProvider");
-  return ctx;
-};
+  const ctx = useContext(WSContext)
+  if (!ctx) {
+    throw new Error('useWebSocketContext must be used within WebSocketProvider')
+  }
+  return ctx
+}
