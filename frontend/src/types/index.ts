@@ -18,3 +18,7 @@ export type RouteHandle = {
   title?: string
   sidebarId?: string
 }
+
+
+export type AnalyzeStatus = 'New' | 'Processing' | 'Done' | 'Pause'
+

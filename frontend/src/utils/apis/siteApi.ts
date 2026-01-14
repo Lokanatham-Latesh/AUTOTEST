@@ -6,7 +6,21 @@ export type Site = {
   id: string
   site_title: string
   site_url: string
-  status: 'New' | 'Processing' | 'Done'
+  status: 'New' | 'Processing' | 'Done' | 'Pause'
+}
+export type SiteInfo = {
+  site_id: number
+  site_title: string
+  site_url: string
+  status: 'New' | 'Processing' | 'Done' | 'Pause'
+  created_on: string
+  updated_on: string
+  page_count: number
+  test_scenario_count: number
+  test_case_count: number
+  test_suite_count: number
+  test_environment: string | null
+  scheduled_test_cases: string | null
 }
 
 export interface GetSitesParams {
@@ -89,5 +103,9 @@ export const siteApi = {
         totalPages: Math.ceil(data.total / data.limit),
       },
     }
+  },
+  getSiteInfo: async (siteId: number): Promise<SiteInfo> => {
+    const { data } = await api.get(`/sites/${siteId}/info`)
+    return data
   },
 }
