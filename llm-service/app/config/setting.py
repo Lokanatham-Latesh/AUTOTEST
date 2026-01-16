@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     RABBITMQ_PORT: str = "5672:5672"
     SITE_ANALYSE_QUEUE: str
     PAGE_EXTRACT_QUEUE: str
+    PAGE_ANALYSE_QUEUE: str
+
     LLM_QUEUE: str
     PAGE_CRAWL_MAX_DEPTH: int = 2
 

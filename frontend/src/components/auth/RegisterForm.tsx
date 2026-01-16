@@ -142,7 +142,7 @@ const RegisterForm: React.FC = () => {
 
               <Button
                 type="submit"
-                className="w-full bg-red-600 hover:bg-red-700 h-11 text-white"
+                className="w-full bg-red-600 hover:bg-red-700 h-11 text-white cursor-pointer"
                 disabled={registerMutation.isPending}
               >
                 {registerMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -150,9 +150,9 @@ const RegisterForm: React.FC = () => {
               </Button>
             </form>
 
-            <div className="text-center text-sm text-gray-600 pt-2">
+            <div className="text-center text-sm text-gray-600 pt-2 ">
               Already have an account?{' '}
-              <Link to="/login" className="font-semibold text-red-600 hover:underline">
+              <Link to="/login" className="font-semibold text-red-600 hover:underline cursor-pointer">
                 Sign In
               </Link>
             </div>

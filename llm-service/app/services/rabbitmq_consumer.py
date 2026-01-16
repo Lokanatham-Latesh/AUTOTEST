@@ -18,8 +18,6 @@ class RabbitMQConsumer:
 
         while not self._stop_event.is_set():
             try:
-                logger.info(f"Starting consumer for queue: {queue_name}")
-
                 async with self.channel_pool.acquire() as channel:
                     queue = await channel.declare_queue(
                         queue_name,
@@ -28,50 +26,34 @@ class RabbitMQConsumer:
                     )
 
                     async for message in queue.iterator():
-                        if self._stop_event.is_set():
-                            logger.info(
-                                f"[CONSUMER] Stop signal received for {queue_name}"
-                            )
-                            return
-
                         try:
-                            async with message.process():
-                                body = json.loads(message.body.decode())
+                            body = json.loads(message.body.decode())
+                            logger.info(
+                                f"[CONSUMER] {queue_name} | payload={body}"
+                            )
 
-                                logger.info(
-                                    f"[CONSUMER] Message received on {queue_name}: {body}"
-                                )
+                            await handler(body)
 
-                                await handler(body)
+                            await message.ack()
 
                         except Exception:
                             logger.exception(
-                                f"[CONSUMER] Error processing message on {queue_name}"
+                                f"[CONSUMER] Error in {queue_name}"
                             )
+                            await message.nack(requeue=True)
 
             except Exception:
                 logger.exception(
-                    f"[CONSUMER] Connection lost for {queue_name}. Retrying in 5 seconds..."
+                    f"[CONSUMER] Connection lost for {queue_name}, retrying..."
                 )
                 await asyncio.sleep(5)
 
     async def consume_all(self):
-        logger.info("RabbitMQ consumer started")
-
         tasks = [
             asyncio.create_task(self.consume_queue(queue))
             for queue in self.handlers
         ]
-
-        for task in tasks:
-            task.add_done_callback(
-                lambda t: logger.exception(t.exception())
-                if t.exception()
-                else None
-            )
-
         await asyncio.gather(*tasks)
 
     async def stop(self):
-        logger.info("Stopping RabbitMQ consumers...")
         self._stop_event.set()

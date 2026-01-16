@@ -93,7 +93,7 @@ const LoginForm: React.FC = () => {
 
               <Button
                 type="submit"
-                className="w-full bg-red-600 hover:bg-red-700 h-11 text-white"
+                className="w-full bg-red-600 hover:bg-red-700 h-11 text-white cursor-pointer"
                 disabled={loginMutation.isPending}
               >
                 {loginMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -103,7 +103,10 @@ const LoginForm: React.FC = () => {
 
             <div className="text-center text-sm text-gray-600 pt-2">
               Don’t have an account?{' '}
-              <Link to="/register" className="font-semibold text-red-600 hover:underline">
+              <Link
+                to="/register"
+                className="font-semibold text-red-600 hover:underline cursor-pointer"
+              >
                 Sign up
               </Link>
             </div>

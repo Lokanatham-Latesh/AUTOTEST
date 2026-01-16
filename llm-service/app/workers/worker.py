@@ -1,61 +1,37 @@
 from datetime import datetime
 from urllib.parse import urlparse
+import asyncio
 
 from app.config.logger import logger
-from app.config.database import get_db
 from app.services.selenium_driver import get_driver
 from app.extractor.url_extractor import URLExtractor
+from app.services.page_analysis_service import PageAnalysisService
+from app.llm.llm_wrapper import LLMWrapper
+from app.llm.prompt_manager import PromptManager
+from app.services.rabbitmq_producer import rabbitmq_producer
+from app.config.database import SessionLocal
+from app.config.setting import settings
 
 from shared_orm.models.site import Site
 from shared_orm.models.page import Page
 from shared_orm.models.site_alias import SiteAlias
-from app.config.database import SessionLocal
-
 
 
 class WorkerService:
 
-    async def process_site_analyse(self, body: dict):
-        """
-        Handles SITE_ANALYSE_QUEUE
-        Currently just forwards to PAGE_EXTRACT flow
-        """
-        logger.info(f"[SITE_ANALYSE] Started | payload={body}")
-
-        site_id = body.get("site_id")
-        site_url = body.get("site_url")
-
-        if not site_id or not site_url:
-            raise ValueError("site_id or site_url missing")
-
-        # No DB update here
-        # Real work happens in PAGE_EXTRACT
-        logger.info(f"[SITE_ANALYSE] Queued site_id={site_id} for extraction")
-
+    # ---------------- PAGE EXTRACT ---------------- #
     async def process_page_extract(self, body: dict):
-        """
-        Handles PAGE_EXTRACT_QUEUE
-        Extracts pages and updates DB
-        """
         logger.info(f"[PAGE_EXTRACT] Started | payload={body}")
 
-        site_id = body.get("site_id")
-        site_url = body.get("site_url")
-        requested_by = body.get("requested_by")
-
-        if not site_id or not site_url:
-            raise ValueError("site_id or site_url missing")
+        site_id = body["site_id"]
+        site_url = body["site_url"]
+        requested_by = body["requested_by"]
 
         db = SessionLocal()
 
         try:
             site = db.query(Site).filter(Site.id == site_id).first()
-            if not site:
-                logger.warning("Site not found")
-                return
-
-            if site.status == "Pause":
-                logger.info("Site paused before extraction")
+            if not site or site.status == "Pause":
                 return
 
             site.status = "Processing"
@@ -63,77 +39,120 @@ class WorkerService:
             site.updated_by = requested_by
             db.commit()
 
+            loop = asyncio.get_running_loop()
+
             driver = get_driver()
             extractor = URLExtractor(driver, logger)
 
             try:
-                urls = extractor.extract_urls(site_url)
+                urls = await loop.run_in_executor(
+                    None, extractor.extract_urls, site_url
+                )
+
                 base_domain = urlparse(site_url).netloc
 
                 for url in urls:
-                    db.refresh(site)
-                    if site.status == "Pause":
-                        logger.info("Site paused during extraction")
-                        return
-
-                    exists = db.query(Page).filter(Page.page_url == url).first()
-                    if not exists:
-                        db.add(
-                            Page(
-                                site_id=site.id,
-                                page_url=url,
-                                status="New",
-                                created_on=datetime.utcnow(),
-                                created_by=requested_by,
-                            )
-                        )
+                    if not db.query(Page).filter(Page.page_url == url).first():
+                        db.add(Page(
+                            site_id=site.id,
+                            page_url=url,
+                            status="new",
+                            created_on=datetime.utcnow(),
+                            created_by=requested_by,
+                        ))
 
                     parsed = urlparse(url)
                     if parsed.netloc != base_domain:
-                        alias_exists = db.query(SiteAlias).filter(
+                        if not db.query(SiteAlias).filter(
                             SiteAlias.site_id == site.id,
                             SiteAlias.site_alias_url == parsed.netloc
-                        ).first()
-
-                        if not alias_exists:
-                            db.add(
-                                SiteAlias(
-                                    site_id=site.id,
-                                    site_alias_url=parsed.netloc
-                                )
-                            )
+                        ).first():
+                            db.add(SiteAlias(
+                                site_id=site.id,
+                                site_alias_url=parsed.netloc
+                            ))
 
                 db.commit()
-
-                site.status = "Done"
-                site.updated_on = datetime.utcnow()
-                db.commit()
-
-                logger.info(f"[PAGE_EXTRACT] Completed | site_id={site.id}")
 
             finally:
                 driver.quit()
 
-        except Exception as e:
-            logger.exception(f"[PAGE_EXTRACT] Failed | error={e}")
-            raise
+            site.status = "Done"
+            site.updated_on = datetime.utcnow()
+            db.commit()
+
+            logger.info(f"[PAGE_EXTRACT] Completed | site_id={site.id}")
+
+            # Emit PAGE_ANALYSE events PER PAGE
+            pages = db.query(Page).filter(
+                Page.site_id == site.id,
+                Page.status == "new"
+            ).all()
+
+            for page in pages:
+                await rabbitmq_producer.publish_message(
+                    settings.PAGE_ANALYSE_QUEUE,
+                    {
+                        "event": "PAGE_ANALYSE",
+                        "page_id": page.id,
+                        "requested_by": requested_by,
+                        "timestamp": datetime.utcnow().isoformat()
+                    },
+                    priority=5
+                )
 
         finally:
             db.close()
 
-    async def process_llm_task(self, body: dict):
-        """
-        Handles LLM_QUEUE
-        (Future implementation)
-        """
-        logger.info(f"[LLM] Started | payload={body}")
+    async def process_page_analyse(self, body: dict):
+        logger.info(f"[PAGE_ANALYSE] Started | payload={body}")
 
-        task_id = body.get("task_id")
-        content = body.get("content")
+        page_id = body["page_id"]
+        requested_by = body["requested_by"]
 
-        if not task_id or not content:
-            raise ValueError("task_id or content missing")
+        db = SessionLocal()
 
-        logger.info(f"[LLM] Task received | task_id={task_id}")
+        page = db.query(Page).filter(Page.id == page_id).first()
+        if not page or page.status != "new":
+            db.close()
+            return
+
+        page.status = "generating_metadata"
+        db.commit()
+
+        driver = get_driver()
+        llm = LLMWrapper()
+        prompt_manager = PromptManager()
+
+        analyzer = PageAnalysisService(
+            driver=driver,
+            logger=logger,
+            llm=llm,
+            prompt_manager=prompt_manager
+        )
+
+        loop = asyncio.get_running_loop()
+
+        try:
+            await loop.run_in_executor(
+                None,
+                analyzer.analyze_page,
+                page.id,
+                page.page_url,
+                requested_by
+            )
+
+            page.status = "generating_test_scenarios"
+            db.commit()
+
+        except Exception:
+            page.status = "new"
+            db.commit()
+            raise
+
+        finally:
+            driver.quit()
+            db.close()
+
 
 worker_service = WorkerService()
