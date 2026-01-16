@@ -4,7 +4,6 @@ import os
 from datetime import datetime
 
 LOG_DIR = "logs-worker"
-
 current_date = datetime.now().strftime("%Y-%m-%d")
 LOG_FILE = f"autotest_{current_date}.log"
 
@@ -15,6 +14,12 @@ def setup_logger():
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
+    # ---- Formatter ----
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    )
+
+    # ---- File Handler (rotates daily) ----
     file_handler = TimedRotatingFileHandler(
         filename=os.path.join(LOG_DIR, LOG_FILE),
         when="midnight",
@@ -23,13 +28,18 @@ def setup_logger():
         encoding="utf-8",
         utc=False
     )
-
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    )
     file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.INFO)
 
-    logger.addHandler(file_handler)
+    # ---- Console Handler ----
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)
+
+    # ---- Avoid duplicate handlers ----
+    if not logger.handlers:
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
 
     return logger
 

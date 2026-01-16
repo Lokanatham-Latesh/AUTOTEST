@@ -23,7 +23,7 @@ type Site = {
   id: string
   site_title: string
   site_url: string
-  status: 'New' | 'Processing' | 'Done'
+  status: 'New' | 'Processing' | 'Done' | 'Pause'
 }
 
 type Props = {
@@ -98,6 +98,7 @@ function StatusPill({ status }: { status: Site['status'] }) {
     New: 'bg-blue-100 text-blue-700',
     Processing: 'bg-amber-100 text-amber-700',
     Done: 'bg-emerald-100 text-emerald-700',
+    Pause: 'bg-gray-100 text-gray-700',
   }
 
   return (

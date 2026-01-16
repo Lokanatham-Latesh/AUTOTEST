@@ -40,35 +40,38 @@ export type SiteInfo = {
     testEnvironment: number
     scheduleTestCase: number
   }
-  analyzeStatus: 'New' | 'Processing' | 'Done'
+  analyzeStatus: 'New' | 'Processing' | 'Done' |'Pause'
 }
 
 export const useSiteInfoQuery = (id: string) => {
   return useQuery<SiteInfo>({
     queryKey: ['site-info', id],
+
     queryFn: async () => {
-      // Return dummy data
-      await new Promise((res) => setTimeout(res, 500)) // simulate loading
+      const apiData = await siteApi.getSiteInfo(Number(id))
+
       return {
-        id,
-        title: 'Site User admin profile website',
-        url: 'https://abc.com',
-        createdAt: '2025-08-25T16:30:00Z',
-        updatedAt: '2025-08-25T16:30:00Z',
-        analyzeStatus: 'Processing',
+        id: String(apiData.site_id),
+        title: apiData.site_title,
+        url: apiData.site_url,
+        createdAt: apiData.created_on,
+        updatedAt: apiData.updated_on,
+        analyzeStatus: apiData.status,
         stats: {
-          pages: 15,
-          testScenario: 25,
-          testCases: 123,
-          testSuite: 78,
-          testEnvironment: 56,
-          scheduleTestCase: 23,
+          pages: apiData.page_count,
+          testScenario: apiData.test_scenario_count,
+          testCases: apiData.test_case_count,
+          testSuite: apiData.test_suite_count,
+          testEnvironment: apiData.test_environment ? Number(apiData.test_environment) : 0,
+          scheduleTestCase: apiData.scheduled_test_cases ? Number(apiData.scheduled_test_cases) : 0,
         },
       }
     },
+
     enabled: !!id,
   })
 }
+
 
 export const useCreateSiteMutation = () => {
   const queryClient = useQueryClient()
