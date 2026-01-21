@@ -77,9 +77,7 @@ class WorkerService:
             finally:
                 driver.quit()
 
-            site.status = "Done"
-            site.updated_on = datetime.utcnow()
-            db.commit()
+         
 
             logger.info(f"[PAGE_EXTRACT] Completed | site_id={site.id}")
 

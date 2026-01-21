@@ -9,6 +9,7 @@ from shared_orm.models.page_link import PageLink
 
 
 
+
 class PageAnalysisService:
 
     def __init__(self, driver, logger, llm, prompt_manager):
@@ -58,6 +59,8 @@ class PageAnalysisService:
     def _save_page_links(self, db, source_page: Page, html: str, requested_by: int):
         extractor = NavigationExtractor(source_page.page_url)
         events = extractor.extract(html)
+        DEFAULT_TEST_SCENARIO_ID = 0
+
 
         for event in events:
             target_page = db.query(Page).filter(
@@ -87,7 +90,7 @@ class PageAnalysisService:
             link = PageLink(
                 page_id_source=source_page.id,
                 page_id_target=target_page.id,
-                test_scenario_id_source=None,
+                test_scenario_id_source=DEFAULT_TEST_SCENARIO_ID,
                 event_selector=event["selector"],
                 event_description=event["description"]
             )

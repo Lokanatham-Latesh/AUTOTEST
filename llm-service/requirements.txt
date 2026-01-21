@@ -38,3 +38,12 @@ jsonschema==4.23.0
 pyppeteer==2.0.0
 pyyaml==6.0.2
 bs4==0.0.2
+
+# LangChain + providers
+langchain==0.3.24
+langchain_openai==0.3.15
+langchain_groq==0.3.2
+langchain_google_genai==2.1.4
+langchain_anthropic==0.3.18
+langchain_ollama==0.3.6
+langchain-community==0.3.23

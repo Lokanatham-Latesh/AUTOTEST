@@ -94,7 +94,7 @@ export function SitePageTable({ data }: { data: Page[] }) {
       columns={columns}
       actions={actions}
       getRowKey={(p) => p.id}
-      onRowClick={(p) => navigate(`/page-info/${p.id}`)}
+      onRowClick={(p) => navigate(`/page-info/${p.id}?site_id=${p.site_id}`)}
     />
   )
 }
