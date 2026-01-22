@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import Integer, String, DateTime, ForeignKey, Enum, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from shared_orm.models.setting_category import SettingCategory
 from shared_orm.db.base import Base
 # from app.models.user import User
 # XLSX enum: Text, Number, Date, Dropdown, Radio Button, Checkbox
@@ -19,6 +20,8 @@ class Setting(Base):
     __tablename__ = "setting"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    setting_category_id: Mapped[int | None] = mapped_column(ForeignKey("setting_category.id"), nullable=True)
+    category: Mapped["SettingCategory | None"] = relationship("SettingCategory")
     key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)

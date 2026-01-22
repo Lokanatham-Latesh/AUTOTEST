@@ -8,6 +8,7 @@ from app.routers.auth import router as auth_router
 from app.routers.site import router as site_router
 from app.routers.pages import router as pages_router
 from app.routers.websocket import router as websocket_router
+from app.routers.setting import router as setting_router
 from app.db.session import get_db
 from app.config.rabbitmq import rabbitmq_connection
 from app.config.logger import logger
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(site_router, prefix="/api/v1")
     app.include_router(websocket_router, prefix="/api/v1")
     app.include_router(pages_router, prefix="/api/v1")
+    app.include_router(setting_router, prefix="/api/v1")
     
 
 
