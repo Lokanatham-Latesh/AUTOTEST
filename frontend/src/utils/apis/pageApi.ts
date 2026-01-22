@@ -1,3 +1,4 @@
+import type { GetPageInfoParams, PageInfoResponse } from '@/types/pageInfo'
 import api from '../axios'
 
 export type Page = {
@@ -41,5 +42,9 @@ export const pageApi = {
         totalPages: Math.ceil(data.total / data.limit),
       },
     }
+  },
+  getPageInfo: async (params: GetPageInfoParams): Promise<PageInfoResponse> => {
+    const { data } = await api.get('/pages/info', { params })
+    return data
   },
 }
