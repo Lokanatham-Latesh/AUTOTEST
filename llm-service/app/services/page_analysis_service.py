@@ -87,7 +87,7 @@ class PageAnalysisService:
             link = PageLink(
                 page_id_source=source_page.id,
                 page_id_target=target_page.id,
-                test_scenario_id_source=None,
+                test_scenario_id_source=0,
                 event_selector=event["selector"],
                 event_description=event["description"]
             )
