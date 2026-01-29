@@ -1,7 +1,7 @@
 """seed role data
 
 Revision ID: 821cca5fc78c
-Revises: d2d1096b78c2
+Revises: 131416675501
 Create Date: 2025-12-16 14:27:57.448383
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa, json
 
 # revision identifiers, used by Alembic.
 revision: str = '821cca5fc78c'
-down_revision: Union[str, Sequence[str], None] = 'd2d1096b78c2'
+down_revision: Union[str, Sequence[str], None] = '131416675501'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

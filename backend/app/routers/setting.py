@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.setting_service import SettingService
 from app.middleware.auth_middleware import auth_required
-from app.schemas.setting_schema import SettingUpdateActualValue
+from app.schemas.setting_schema import BulkSettingUpdateRequest, SettingResponse, SettingUpdateActualValue
 from shared_orm.models.user import User
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
@@ -38,7 +38,7 @@ def get_setting_category_by_id(
     current_user: User = Depends(auth_required)
 ):
     return setting_service.get_setting_category_by_id(
-        category_id=category_id,
+        setting_category_id=category_id,
         db=db
     )
 
@@ -104,4 +104,22 @@ def update_setting_actual_value(
         setting_id=setting_id,
         actual_value=payload.actual_value,
         db=db
+    )
+
+@router.patch(
+    "/category/{setting_category_id}/actual-values",
+    response_model=list[SettingResponse]
+
+)
+def update_settings_by_category(
+    setting_category_id: int,
+    request: BulkSettingUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required)
+):
+    return setting_service.update_actual_values_by_category(
+        setting_category_id=setting_category_id,
+        updates=request.settings,
+        db=db,
+        updated_by_user_id=current_user.id
     )

@@ -6,7 +6,7 @@ import RootProvider from '../providers/RootProvider'
 import PublicRoute from './PublicRoute'
 import SiteInfoWrapper from '@/components/site/SiteInfoWrapper'
 import User from '@/pages/User'
-import Setting from '@/pages/Setting'
+// import Setting from '@/pages/Setting'
 import TestScenario from '@/components/testScenario/TestScenario'
 import TestSuite from '@/components/site/TestSuite'
 import Configration from '@/components/site/Configuration'
@@ -15,6 +15,8 @@ import PageInfoWrapper from '@/components/page/PageInfoWrapper'
 import PageInfoPage from '@/components/page/PageInfoPage'
 import SitePages from '@/components/site/SitePages'
 import TestScenarioDetail from '@/components/testScenario/TestScenarioDetail'
+import { SettingsLayout } from '@/components/setting/SettingsLayout'
+import { SettingsCategoryPage } from '@/components/setting/SettingsCategoryPage'
 
 const Layout = lazy(() => import('@/components/layout/Layout'))
 const ProtectedRoute = lazy(() => import('./ProtectedRoute'))
@@ -93,11 +95,15 @@ export const router = createBrowserRouter([
           },
           {
             path: 'settings',
-            element: <Setting />,
-            handle: {
-              sidebarId: 'settings',
-              title: 'Settings',
-            },
+            element: <SettingsLayout />,
+            handle: { sidebarId: 'settings' },
+            children: [
+              {
+                path: ':categorySlug',
+                element: <SettingsCategoryPage />,
+                handle: { sidebarId: 'settings' },
+              },
+            ],
           },
           {
             path: 'site-info/',
