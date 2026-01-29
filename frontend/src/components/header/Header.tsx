@@ -23,7 +23,7 @@ export const Header = () => {
         typeof match.handle === 'object' && match.handle !== null && 'title' in match.handle,
     )
 
-  const title = currentRoute?.handle.title ?? 'Site'
+  const title = currentRoute?.handle.title ?? 'Settings'
 
   return (
     <header className="sticky top-0 z-10 h-[72px] border-b border-border bg-background">

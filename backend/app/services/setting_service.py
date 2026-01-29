@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, asc, desc
-
+from datetime import datetime
 from shared_orm.models.setting_category import SettingCategory
 from shared_orm.models.setting import Setting
 from sqlalchemy import func
@@ -83,3 +83,54 @@ class SettingService:
         db.refresh(setting)
 
         return setting
+    def update_actual_values_by_category(
+        self,
+        setting_category_id: int,
+        updates: list,
+        db: Session,
+        updated_by_user_id: int,
+    ):
+        if not updates:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No settings provided for update."
+            )
+
+        settings = (
+            db.query(Setting)
+            .filter(Setting.setting_category_id == setting_category_id)
+            .all()
+        )
+
+        if not settings:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No settings found for this category."
+            )
+
+        settings_map = {s.id: s for s in settings}
+
+        for item in updates:
+            if item.id not in settings_map:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Setting ID {item.id} does not belong to this category."
+                )
+
+        try:
+            for item in updates:
+                setting = settings_map[item.id]
+                setting.actual_value = item.actual_value
+                setting.updated_by = updated_by_user_id
+                setting.updated_on = datetime.utcnow()
+                
+
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update settings."
+            )
+
+        return list(settings_map.values())
