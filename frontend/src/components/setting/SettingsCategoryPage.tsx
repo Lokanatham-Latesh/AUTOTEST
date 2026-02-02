@@ -19,10 +19,10 @@ export const SettingsCategoryPage = () => {
       return <GeneralSettings categoryId={category.id} />
 
     case 'llm-settings':
-      return <LlmSettings categoryId={category.id} />
+      return <LlmSettings />
 
     case 'prompt-settings':
-      return <PromptSettings categoryId={category.id} />
+      return <PromptSettings />
 
     default:
       return null
