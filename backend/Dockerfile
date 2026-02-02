@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
@@ -10,15 +9,18 @@ RUN apt-get update && apt-get install -y \
     gcc default-libmysqlclient-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy shared FIRST
+# Copy ONLY shared package (needed for pip install)
 COPY shared /app/shared
 
-# Copy backend code
-COPY backend /app/backend
+# Copy ONLY requirements file
+COPY backend/requirements.txt /app/backend/requirements.txt
 
-# Install deps
+# Install deps (cached unless shared or requirements change)
 RUN pip install --upgrade pip \
-    && pip install -r backend/requirements.txt
+    && pip install -r /app/backend/requirements.txt
+
+# Now copy actual backend code
+COPY backend /app/backend
 
 WORKDIR /app/backend
 
