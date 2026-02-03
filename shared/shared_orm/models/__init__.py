@@ -10,3 +10,7 @@ from .test_execution import TestExecution
 from .test_scenario import TestScenario
 from .test_suite import TestSuite
 from .user import User
+from .provider import Provider
+from .provider_model import ProviderModel
+from .function import AppFunction
+from .function_provider_model import FunctionProviderModel

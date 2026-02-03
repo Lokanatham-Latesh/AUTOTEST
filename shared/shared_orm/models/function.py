@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, func
 from shared_orm.db.base import Base
 
-class Function(Base):
+class AppFunction(Base):
     __tablename__ = 'function'
 
     id = Column(Integer, primary_key=True)

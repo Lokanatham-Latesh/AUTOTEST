@@ -2,7 +2,8 @@ from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import Boolean, Integer, String, DateTime, ForeignKey, Enum, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from shared.shared_orm.models.user import User
+from shared_orm.models.provider_model import ProviderModel
+from shared_orm.models.user import User
 from shared_orm.db.base import Base
 
 class Provider(Base):
@@ -32,4 +33,10 @@ class Provider(Base):
     )
     updater: Mapped["User | None"] = relationship(
         "User", foreign_keys=[updated_by]
+    )
+
+    models: Mapped[list["ProviderModel"]] = relationship(
+        "ProviderModel",
+        back_populates="provider",
+        cascade="all, delete-orphan"
     )

@@ -8,8 +8,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-
-Base = declarative_base()
+from shared_orm.db.base import Base
 
 class FunctionProviderModel(Base):
     __tablename__ = 'function_provider_model'
@@ -41,7 +40,7 @@ class FunctionProviderModel(Base):
     updated_on = Column(DateTime, nullable=True)
 
     # Optional relationships (recommended)
-    function = relationship("Function", lazy="joined")
+    function = relationship("AppFunction", lazy="joined")
     provider = relationship("Provider", lazy="joined")
     provider_model = relationship("ProviderModel", lazy="joined")
 

@@ -1,0 +1,118 @@
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import or_, asc, desc
+from datetime import datetime
+from shared_orm.models.provider import Provider
+from shared_orm.models.provider_model import ProviderModel
+from sqlalchemy import func
+from app.schemas.provider_schema import ProviderResponse
+from app.schemas.provider_model_schema import ProviderModelResponse, ProviderModelUpdate
+
+class ProviderService:
+    #-------------------------------
+    # Get all Providers
+    #-------------------------------
+    def get_all_providers(
+        self,
+        db: Session,
+    ):
+        providers = db.query(Provider).all()
+        return providers
+    
+    #-------------------------------
+    # Get Provider By ID
+    #-------------------------------
+    def get_provider_by_id(
+        self,
+        provider_id: int,
+        db: Session,
+    ):
+        provider = db.query(Provider).filter(Provider.id == provider_id).first()
+        if not provider:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found."
+            )
+        return provider
+    
+    #-------------------------------
+    # Save / Update Provider
+    #-------------------------------
+    def update_provider(
+        self,
+        provider_id: int,
+        key: str,
+        is_active: bool,
+        db: Session,
+    ):
+        provider = db.query(Provider).filter(Provider.id == provider_id).first()
+        if not provider:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found."
+            )
+        provider.key = key
+        provider.is_active = is_active
+        db.commit()
+        db.refresh(provider)
+        return provider
+    
+    #-------------------------------
+    # Get all Provider Models
+    #-------------------------------
+    def get_all_providers_models(
+        self,
+        db: Session,
+    ):
+        provider_models = db.query(ProviderModel).all()
+        return provider_models
+    
+    #-------------------------------
+    # Get Provider Model By ID
+    #-------------------------------
+    def get_provider_model_by_id(
+        self,
+        db: Session,
+        model_id: int,
+    ):
+        provider_model = db.query(ProviderModel).filter(ProviderModel.id == model_id).first()
+        if not provider_model:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider Model not found."
+            )
+        return provider_model
+
+    #-------------------------------
+    # Save / Update Provider Model
+    #-------------------------------
+    def update_provider_model(
+        self,
+        model_id: int,
+        payload: ProviderModelUpdate,
+        db: Session
+    ):
+        provider_model = self.get_provider_model_by_id(db, model_id)
+
+        if not provider_model:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider model not found"
+            )
+
+        if payload.prompt is not None:
+            provider_model.prompt = payload.prompt
+
+        provider_model.updated_by = payload.updated_by
+        provider_model.updated_on = datetime.utcnow()
+
+        db.commit()
+        db.refresh(provider_model)
+
+        return ProviderModelUpdate(
+            id=provider_model.id,
+            provider_id=provider_model.provider_id,
+            provider_title=provider_model.provider.title,
+            title=provider_model.title,
+            prompt=provider_model.prompt,
+        )

@@ -1,0 +1,68 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.services.provider_service import ProviderService
+from app.middleware.auth_middleware import auth_required
+from app.schemas.provider_schema import ProviderResponse
+from shared_orm.models.user import User
+
+router = APIRouter(prefix="/providers", tags=["Providers"])
+provider_service = ProviderService()
+
+#-------------------------------
+# Get All Providers
+#-------------------------------
+@router.get(
+    "",
+    response_model=list[ProviderResponse],
+    summary="Get all providers",
+    description="Retrieve a list of all providers."
+)
+def get_all_providers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required)
+):
+    return provider_service.get_all_providers(db=db)
+
+#-------------------------------
+# Get Providers By ID
+#-------------------------------
+@router.get(
+    "/{provider_id}",
+    response_model=ProviderResponse,
+    summary="Get provider by ID",
+    description="Retrieve a specific provider using its ID."
+)
+def get_provider_by_id(
+    provider_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required)
+):
+    return provider_service.get_provider_by_id(
+        provider_id=provider_id,
+        db=db
+    )
+
+#-------------------------------
+# Update Provider
+#-------------------------------
+@router.put(
+    "/{provider_id}",
+    response_model=ProviderResponse,
+    summary="Update provider",
+    description="Update the details of a specific provider."
+)
+def update_provider(
+    provider_id: int,
+    key: str,
+    is_active: bool,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required)
+):
+    return provider_service.update_provider(
+        provider_id=provider_id,
+        key=key,
+        is_active=is_active,
+        db=db
+    )
