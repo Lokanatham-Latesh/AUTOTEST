@@ -31,16 +31,16 @@ class RabbitMQConsumer:
                             logger.info(
                                 f"[CONSUMER] {queue_name} | payload={body}"
                             )
+                            if not message.channel.is_closed:
+                                await message.ack()
 
                             await handler(body)
 
-                            await message.ack()
 
                         except Exception:
                             logger.exception(
                                 f"[CONSUMER] Error in {queue_name}"
                             )
-                            await message.nack(requeue=True)
 
             except Exception:
                 logger.exception(

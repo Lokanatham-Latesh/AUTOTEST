@@ -10,3 +10,8 @@ class ProviderResponse(BaseModel):
 
     class Config:
         from_attributes = True   # VERY IMPORTANT for ORM
+
+class ProviderBulkUpdate(BaseModel):
+    provider_id: int
+    key: str | None = None
+    is_active: bool
