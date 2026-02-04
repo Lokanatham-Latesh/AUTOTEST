@@ -6,7 +6,8 @@ from app.services.provider_service import ProviderService
 from app.middleware.auth_middleware import auth_required
 from app.schemas.provider_schema import ProviderResponse
 from shared_orm.models.user import User
-
+from typing import List
+from app.schemas.provider_schema import ProviderBulkUpdate
 router = APIRouter(prefix="/providers", tags=["Providers"])
 provider_service = ProviderService()
 
@@ -24,6 +25,23 @@ def get_all_providers(
     current_user: User = Depends(auth_required)
 ):
     return provider_service.get_all_providers(db=db)
+
+@router.put(
+    "/bulk-update",
+    response_model=list[ProviderResponse],
+    summary="Bulk update providers",
+    description="Bulk update multiple providers at once."
+)
+def bulk_update_providers(
+    payload: list[ProviderBulkUpdate],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required),
+):
+    return provider_service.bulk_update_providers(
+        payload=payload,
+        db=db,
+        current_user=current_user,
+    )
 
 #-------------------------------
 # Get Providers By ID
