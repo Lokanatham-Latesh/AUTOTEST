@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Float, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from shared_orm.db.base import Base
 
@@ -18,6 +18,10 @@ class ProviderModel(Base):
     title: Mapped[str] = mapped_column(
         String(200), nullable=False
     )
+
+    model = mapped_column(String(100), nullable=False)
+
+    temperature = mapped_column(Float, nullable=False, default=0.7)
 
     prompt: Mapped[str | None] = mapped_column(
         String(5000), nullable=True

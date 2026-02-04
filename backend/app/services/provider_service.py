@@ -6,7 +6,7 @@ from shared_orm.models.provider import Provider
 from shared_orm.models.provider_model import ProviderModel
 from sqlalchemy import func
 from app.schemas.provider_schema import ProviderResponse
-from app.schemas.provider_model_schema import ProviderModelResponse, ProviderModelUpdate
+from app.schemas.provider_model_schema import ProviderModelResponse, ProviderModelUpdateRequest
 
 class ProviderService:
     #-------------------------------
@@ -84,35 +84,86 @@ class ProviderService:
         return provider_model
 
     #-------------------------------
-    # Save / Update Provider Model
+    # Save / Update Provider Model Bulk
     #-------------------------------
-    def update_provider_model(
+    def update_provider_models(
         self,
-        model_id: int,
-        payload: ProviderModelUpdate,
-        db: Session
+        provider_id: int,
+        payload: list[ProviderModelUpdateRequest],
+        updated_by: int,
+        db: Session,
     ):
-        provider_model = self.get_provider_model_by_id(db, model_id)
+        updated_models = []
 
-        if not provider_model:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Provider model not found"
+        for item in payload:
+            provider_model = (
+                db.query(ProviderModel)
+                .filter(
+                    ProviderModel.id == item.id,
+                    ProviderModel.provider_id == provider_id
+                )
+                .first()
             )
 
-        if payload.prompt is not None:
-            provider_model.prompt = payload.prompt
+            if not provider_model:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Provider model {item.id} not found for provider {provider_id}"
+                )
 
-        provider_model.updated_by = payload.updated_by
-        provider_model.updated_on = datetime.utcnow()
+            if item.prompt is not None:
+                provider_model.prompt = item.prompt
+
+            if item.model is not None:
+                provider_model.model = item.model
+
+            if item.temperature is not None:
+                provider_model.temperature = item.temperature
+
+            provider_model.updated_by = updated_by
+            provider_model.updated_on = datetime.utcnow()
+
+            updated_models.append(provider_model)
 
         db.commit()
-        db.refresh(provider_model)
 
-        return ProviderModelUpdate(
-            id=provider_model.id,
-            provider_id=provider_model.provider_id,
-            provider_title=provider_model.provider.title,
-            title=provider_model.title,
-            prompt=provider_model.prompt,
+        for model in updated_models:
+            db.refresh(model)
+
+        return updated_models
+
+    #-------------------------------
+    # Get Provider Models By Provider ID
+    #-------------------------------
+    def get_provider_models_by_provider_id(
+        self,
+        provider_id: int,
+        db: Session,
+    ):
+        provider = db.query(Provider).filter(Provider.id == provider_id).first()
+        if not provider:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found."
+            )
+        
+        provider_models = (
+            db.query(ProviderModel)
+            .filter(ProviderModel.provider_id == provider_id)
+            .all()
         )
+        
+        return {
+            "providerId": provider.id,
+            "providerTitle": provider.title,
+            "models": [
+                {
+                    "id": model.id,
+                    "title": model.title,
+                    "model": model.model,
+                    "temperature": model.temperature,
+                    "prompt": model.prompt,
+                }
+                for model in provider_models
+            ],
+        }

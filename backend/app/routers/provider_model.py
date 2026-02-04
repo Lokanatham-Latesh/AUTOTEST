@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.services.provider_service import ProviderService
 from app.middleware.auth_middleware import auth_required
-from app.schemas.provider_model_schema import ProviderModelResponse, ProviderModelUpdate
+from app.schemas.provider_model_schema import ProviderModelResponse, ProviderModelUpdateRequest, ProviderModelUpdateResponse, ProviderModelsByProviderResponse
 from shared_orm.models.user import User
 
 router = APIRouter(prefix="/providerModel", tags=["ProviderModel"])
@@ -45,25 +45,42 @@ def get_provider_model_by_id(
     )
 
 #-------------------------------
-# Update Provider Model
+# Update Provider Model Bulk
 #-------------------------------
 @router.put(
-    "/{provider_model_id}",
-    response_model=ProviderModelUpdate,
-    summary="Update provider Model",
-    description="Update the details of a specific provider model."
+    "/api/providers/{provider_id}/provider-models",
+    response_model=list[ProviderModelUpdateResponse],
+    summary="Bulk update provider models",
+    description="Update multiple provider models for a provider"
 )
-def update_provider_model(
-    provider_model_id: int,
-    prompt: str,
+def update_provider_models(
+    provider_id: int,
+    payload: list[ProviderModelUpdateRequest],
     db: Session = Depends(get_db),
-    current_user: User = Depends(auth_required)
+    current_user: User = Depends(auth_required),
 ):
-    return provider_service.update_provider_model(
-        model_id=provider_model_id,
-        payload=ProviderModelUpdate(
-            prompt=prompt,
-            updated_by=current_user.id
-        ),
+    return provider_service.update_provider_models(
+        provider_id=provider_id,
+        payload=payload,
+        updated_by=current_user.id,
+        db=db
+    )
+
+#-------------------------------
+# Get Provider Models By Provider ID
+#-------------------------------
+@router.get(
+    "/providers/{provider_id}/models",
+    response_model=ProviderModelsByProviderResponse,
+    summary="Get Provider Models by Provider ID",
+    description="Fetch all model configurations associated with a provider"
+)
+def get_provider_models_by_provider_id(
+    providerId: int = Query(..., description="Provider ID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required),
+):
+    return provider_service.get_provider_models_by_provider_id(
+        provider_id=providerId,
         db=db
     )
