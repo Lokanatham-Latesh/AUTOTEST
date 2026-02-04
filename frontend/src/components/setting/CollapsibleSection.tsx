@@ -1,32 +1,39 @@
+// components/CollapsibleSection.tsx
+
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
-export const CollapsibleSection = ({
-  title,
-  children,
-}: {
+interface Props {
   title: string
   children: React.ReactNode
-}) => {
+  onSave?: () => void
+  loading?: boolean
+}
+
+export const CollapsibleSection = ({ title, children, onSave, loading = false }: Props) => {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
     <div className="border rounded-lg">
-      <div className="flex items-center justify-between px-4 py-3 bg-red-50">
+      <div className="flex justify-between items-center px-4 py-3 bg-muted">
         <h3 className="font-semibold">{title}</h3>
 
-        <div className="flex items-center gap-3">
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-red-500 text-red-500 hover:bg-red-50 font-semibold px-4 cursor-pointer"
-          >
-            Save
-          </Button>
+        <div className="flex gap-3 items-center">
+          {onSave && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onSave}
+              disabled={loading}
+              className="border-red-500 text-red-500 hover:bg-red-50 font-semibold px-4 cursor-pointer"
+            >
+              {loading ? 'Saving...' : 'Save'}
+            </Button>
+          )}
 
-          <div onClick={() => setCollapsed(!collapsed)} className="cursor-pointer p-1 transition">
-            {collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+          <div onClick={() => setCollapsed(!collapsed)} className="cursor-pointer">
+            {collapsed ? <ChevronDown /> : <ChevronUp />}
           </div>
         </div>
       </div>

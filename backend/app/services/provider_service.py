@@ -4,9 +4,12 @@ from sqlalchemy import or_, asc, desc
 from datetime import datetime
 from shared_orm.models.provider import Provider
 from shared_orm.models.provider_model import ProviderModel
+from shared_orm.models.user import User
 from sqlalchemy import func
-from app.schemas.provider_schema import ProviderResponse
 from app.schemas.provider_model_schema import ProviderModelResponse, ProviderModelUpdateRequest
+from typing import List
+from app.schemas.provider_schema import ProviderBulkUpdate, ProviderResponse
+from app.schemas.provider_model_schema import ProviderModelResponse
 
 class ProviderService:
     #-------------------------------
@@ -167,3 +170,50 @@ class ProviderService:
                 for model in provider_models
             ],
         }
+    
+    
+    def bulk_update_providers(
+        self,
+        payload: list[ProviderBulkUpdate],
+        db: Session,
+        current_user: User,
+    ):
+        for item in payload:
+            if item.is_active and (not item.key or not item.key.strip()):
+                raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Key is required for active provider (provider_id={item.provider_id})")
+        
+        provider_ids = [item.provider_id for item in payload]
+        providers = (
+            db.query(Provider)
+            .filter(Provider.id.in_(provider_ids))
+            .all()
+        )
+
+        if not providers:
+            raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No providers found to update."
+        )
+        provider_map = {p.id: p for p in providers}
+        now = datetime.utcnow()
+        for item in payload:
+            provider = provider_map.get(item.provider_id)
+            if not provider:
+                continue 
+            provider.is_active = item.is_active
+
+            # Update key only if provided
+            if item.key is not None:
+                provider.key = item.key
+            
+            provider.updated_by = current_user.id
+            provider.updated_on = now
+        db.commit()
+        
+        return providers
+             
+         
+            
+        
