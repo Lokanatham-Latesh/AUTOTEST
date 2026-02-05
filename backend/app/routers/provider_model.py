@@ -48,7 +48,7 @@ def get_provider_model_by_id(
 # Update Provider Model Bulk
 #-------------------------------
 @router.put(
-    "/api/providers/{provider_id}/provider-models",
+    "/providers/{provider_id}/provider-models",
     response_model=list[ProviderModelUpdateResponse],
     summary="Bulk update provider models",
     description="Update multiple provider models for a provider"
@@ -66,9 +66,7 @@ def update_provider_models(
         db=db
     )
 
-#-------------------------------
-# Get Provider Models By Provider ID
-#-------------------------------
+
 @router.get(
     "/providers/{provider_id}/models",
     response_model=ProviderModelsByProviderResponse,
@@ -76,11 +74,11 @@ def update_provider_models(
     description="Fetch all model configurations associated with a provider"
 )
 def get_provider_models_by_provider_id(
-    providerId: int = Query(..., description="Provider ID"),
+    provider_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_required),
 ):
     return provider_service.get_provider_models_by_provider_id(
-        provider_id=providerId,
+        provider_id=provider_id,
         db=db
     )

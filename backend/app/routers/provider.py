@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.provider_service import ProviderService
 from app.middleware.auth_middleware import auth_required
-from app.schemas.provider_schema import ProviderResponse
+from app.schemas.provider_schema import ProviderResponse,ActiveProviderResponse,ProviderModelMinimalResponse
 from shared_orm.models.user import User
 from typing import List
 from app.schemas.provider_schema import ProviderBulkUpdate
@@ -42,6 +42,39 @@ def bulk_update_providers(
         db=db,
         current_user=current_user,
     )
+
+@router.get(
+    "/active",
+    response_model=list[ActiveProviderResponse],
+    summary="Get active providers",
+    description="Retrieve all active providers (id and title only)."
+)
+def get_active_providers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required),
+):
+    return provider_service.get_active_providers(
+        db=db,
+        current_user=current_user
+    )
+
+@router.get(
+    "/{provider_id}/models",
+    response_model=list[ProviderModelMinimalResponse],
+    summary="Get provider models by provider id",
+    description="Retrieve provider models (id and model only) for a provider."
+)
+def get_provider_models_minimal(
+    provider_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required),
+):
+    return provider_service.get_models_by_provider_id(
+        provider_id=provider_id,
+        db=db,
+        current_user=current_user
+    )
+
 
 #-------------------------------
 # Get Providers By ID
@@ -84,3 +117,4 @@ def update_provider(
         is_active=is_active,
         db=db
     )
+

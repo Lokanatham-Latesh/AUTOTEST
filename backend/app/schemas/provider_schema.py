@@ -15,3 +15,12 @@ class ProviderBulkUpdate(BaseModel):
     provider_id: int
     key: str | None = None
     is_active: bool
+
+
+class ActiveProviderResponse(BaseModel):
+    providerId: int
+    providerTitle: str
+    
+class ProviderModelMinimalResponse(BaseModel):
+    providerModelId: int
+    model: str
