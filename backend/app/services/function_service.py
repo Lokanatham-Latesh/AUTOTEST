@@ -5,6 +5,7 @@ from datetime import datetime
 from shared_orm.models.function import AppFunction
 from shared_orm.models.function_provider_model import FunctionProviderModel
 from sqlalchemy import func
+from shared_orm.models.user import User
 from app.schemas.function_schema import FunctionProviderModelResponse
 
 class FunctionService:
@@ -28,17 +29,41 @@ class FunctionService:
         model_id: int,
         db: Session,
     ):
-        function_provider_model = db.query(FunctionProviderModel).filter(
+        fpm = (
+        db.query(FunctionProviderModel)
+        .filter(
             FunctionProviderModel.function_id == function_id,
             FunctionProviderModel.provider_id == provider_id,
-            FunctionProviderModel.provider_model_id == model_id
-        ).first()
-        if not function_provider_model:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Function Provider Model not found."
-            )
-        return function_provider_model
+            FunctionProviderModel.provider_model_id == model_id,
+        )
+        .first())
+
+        if not fpm:
+            return{ 
+                "id": None,
+                "function_id": function_id,
+                "provider_id": provider_id,
+                "provider_model_id": model_id,
+                "additional_info": None,
+                "created_by": None,
+                "created_on": None,
+                "updated_by": None,
+                "updated_on": None,
+                }
+           
+       
+
+        return {
+        "id": fpm.id,
+        "function_id": fpm.function_id,
+        "provider_id": fpm.provider_id,
+        "provider_model_id": fpm.provider_model_id,
+        "additional_info": fpm.additional_info,
+        "created_by": fpm.created_by,
+        "created_on": fpm.created_on,
+        "updated_by": fpm.updated_by,
+        "updated_on": fpm.updated_on,
+    }
     
     #-------------------------------
     # Update Function Provider Model Prompt By IDs
@@ -50,28 +75,41 @@ class FunctionService:
         model_id: int,
         additional_info: str,
         db: Session,
+        current_user: User
     ):
         function_provider_model = db.query(FunctionProviderModel).filter(
             FunctionProviderModel.function_id == function_id,
             FunctionProviderModel.provider_id == provider_id,
             FunctionProviderModel.provider_model_id == model_id
         ).first()
-        if not function_provider_model:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Function Provider Model not found."
-            )
-        function_provider_model.additional_info = additional_info
+        now = datetime.utcnow()
+        if function_provider_model:
+             function_provider_model.additional_info = additional_info
+             function_provider_model.updated_by = current_user.id
+             function_provider_model.updated_on = now
+        else :
+            function_provider_model = FunctionProviderModel(
+            function_id=function_id,
+            provider_id=provider_id,
+            provider_model_id=model_id,
+            additional_info=additional_info,
+            created_by=current_user.id,
+            created_on=now,)
+            db.add(function_provider_model)
+            
         db.commit()
         db.refresh(function_provider_model)
-
-        return FunctionProviderModelResponse(
-            id=function_provider_model.id,
-            function_id=function_provider_model.function_id,
-            function_name=function_provider_model.function.title,
-            provider_id=function_provider_model.provider_id,
-            provider_title=function_provider_model.provider.title,
-            model_id=function_provider_model.provider_model_id,
-            model_title=function_provider_model.provider_model.title,
-            additional_info=function_provider_model.additional_info,
-        )
+        return {
+        "id": function_provider_model.id,
+        "function_id": function_provider_model.function_id,
+        "provider_id": function_provider_model.provider_id,
+        "provider_model_id": function_provider_model.provider_model_id,
+        "additional_info": function_provider_model.additional_info,
+        "created_by": function_provider_model.created_by,
+        "created_on": function_provider_model.created_on,
+        "updated_by": function_provider_model.updated_by,
+        "updated_on": function_provider_model.updated_on,
+        }
+    
+        
+        

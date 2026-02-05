@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.middleware.auth_middleware import auth_required
-from app.schemas.function_schema import FunctionProviderModelResponse
+from app.schemas.function_schema import FunctionProviderModelResponse,FunctionProviderModelUpsertRequest
 from app.services.function_service import FunctionService
 from shared_orm.models.user import User
 
@@ -52,23 +52,22 @@ def get_function_provider_model_by_ids(
 # Update Prompt by Function ID, API Provider ID, and Model ID
 #-------------------------------
 @router.put(
-    "/{function_id}/{provider_id}/{model_id}",
+    "/function-provider-model",
     response_model=FunctionProviderModelResponse,
-    summary="Update prompt by function provider model by IDs",
-    description="Update a specific function provider model's prompt using its IDs."
+    summary="Create or update function provider model prompt",
+    description="Upsert prompt for a function-provider-model mapping."
 )
-def update_function_provider_model_prompt_by_ids(
-    function_id: int,
-    provider_id: int,
-    model_id: int,
-    additional_info: str,
+def upsert_function_provider_model_prompt(
+    payload: FunctionProviderModelUpsertRequest,   
     db: Session = Depends(get_db),
-    current_user: User = Depends(auth_required)
+    current_user: User = Depends(auth_required),
 ):
     return function_service.update_function_provider_model_prompt_by_ids(
-        function_id=function_id,
-        provider_id=provider_id,
-        model_id=model_id,
-        additional_info=additional_info,
-        db=db
+        function_id=payload.function_id,
+        provider_id=payload.provider_id,
+        model_id=payload.provider_model_id,
+        additional_info=payload.additional_info,
+        db=db,
+        current_user=current_user,
     )
+

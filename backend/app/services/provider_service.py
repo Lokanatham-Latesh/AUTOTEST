@@ -213,6 +213,61 @@ class ProviderService:
         db.commit()
         
         return providers
+    def get_active_providers(
+        self,
+        db: Session,
+        current_user: User,
+    ):
+        providers = (
+            db.query(Provider.id, Provider.title)
+            .filter(Provider.is_active == True)
+            .order_by(asc(Provider.title))
+            .all()
+        )
+        if not providers:
+            return[]
+            
+        return [
+            {
+                "providerId": provider.id,
+                "providerTitle": provider.title,
+            }
+            for provider in providers
+        ]
+    def get_models_by_provider_id(
+        self,
+        provider_id: int,
+        db: Session,
+        current_user: User,
+    ):
+        provider = (
+            db.query(Provider)
+            .filter(Provider.id == provider_id)
+            .first()
+        )
+        if not provider:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found."
+            )
+        
+        models = (
+            db.query(ProviderModel.id, ProviderModel.model)
+            .filter(ProviderModel.provider_id == provider_id)
+            .order_by(asc(ProviderModel.model))
+            .all()
+        )
+        if not models:
+            return []
+        return [
+            {
+                "providerModelId": model.id,
+                "model": model.model,
+            }
+            for model in models
+        ]
+
+          
              
          
             
