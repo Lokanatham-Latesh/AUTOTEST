@@ -11,6 +11,9 @@ from app.llm.prompt_manager import PromptManager
 from app.services.rabbitmq_producer import rabbitmq_producer
 from app.config.database import SessionLocal
 from app.config.setting import settings
+from app.services.test_scenario_service import TestScenarioService
+from app.services.test_case_service import TestCaseService
+
 
 from shared_orm.models.site import Site
 from shared_orm.models.page import Page
@@ -140,8 +143,16 @@ class WorkerService:
                 requested_by
             )
 
-            page.status = "generating_test_scenarios"
-            db.commit()
+            await rabbitmq_producer.publish_message(
+                settings.TEST_SCENARIO_QUEUE,
+                {
+                    "event": "TEST_SCENARIO_GENERATE",
+                     "page_id": page.id,
+                    "requested_by": requested_by,
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                priority=5
+            )
 
         except Exception:
             page.status = "new"
@@ -152,5 +163,63 @@ class WorkerService:
             driver.quit()
             db.close()
 
+    async def process_test_scenario(self, body: dict):
+        logger.info(f"[TEST_SCENARIO] Started | payload={body}")
+        page_id = body["page_id"]
+        requested_by = body["requested_by"]
+        llm = LLMWrapper()
+        prompt_manager = PromptManager()
+        service = TestScenarioService(
+            llm=llm,
+            prompt_manager=prompt_manager,
+            logger=logger
+        )
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(
+                None,
+                service.generate,
+                page_id,
+                requested_by
+            )
+            # await rabbitmq_producer.publish_message(
+            #     settings.TEST_CASE_QUEUE,
+            #     {
+            #         "event": "TEST_CASE_GENERATE",
+            #         "page_id": page_id,
+            #         "requested_by": requested_by,
+            #         "timestamp": datetime.utcnow().isoformat()
+            #     },
+            #     priority=5
+            # )
+            logger.info(f"[TEST_SCENARIO] Completed | page_id={page_id}")
+        except Exception as e:
+            logger.exception("[TEST_SCENARIO] Failed")
+            raise
 
+    async def process_test_case(self, body: dict):
+        logger.info(f"[TEST_CASE] Started | payload={body}")
+        page_id = body["page_id"]
+        requested_by = body["requested_by"]
+        llm = LLMWrapper()
+        prompt_manager = PromptManager()
+        service = TestCaseService(
+            llm=llm,
+            prompt_manager=prompt_manager,
+            logger=logger
+        )
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(
+                None,
+                service.generate,
+                page_id,
+                requested_by
+            )
+              # OPTIONAL: next step → script generation
+            logger.info(f"[TEST_CASE] Completed | page_id={page_id}")
+        except Exception:
+            logger.exception("[TEST_CASE] Failed")
+            raise
+                
 worker_service = WorkerService()

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     SITE_ANALYSE_QUEUE: str
     PAGE_EXTRACT_QUEUE: str
     PAGE_ANALYSE_QUEUE: str
+    TEST_SCENARIO_QUEUE: str
+    TEST_CASE_QUEUE:str
+
 
     LLM_QUEUE: str
     PAGE_CRAWL_MAX_DEPTH: int = 2

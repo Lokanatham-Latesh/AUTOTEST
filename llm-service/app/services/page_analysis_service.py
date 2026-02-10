@@ -6,7 +6,7 @@ from app.config.database import SessionLocal
 from shared_orm.models.page import Page
 from app.extractor.navigation_extractor import NavigationExtractor
 from shared_orm.models.page_link import PageLink
-
+from selenium.webdriver.common.by import By
 
 
 
@@ -29,6 +29,11 @@ class PageAnalysisService:
         static_metadata = {
             "title": self.driver.title,
             "url": self.driver.current_url,
+            "forms": self.extract_forms(),
+            "buttons": self.extract_interactive_elements(),
+            "tables": self.extract_data_tables(),
+            "key_flows": self.identify_key_flows()
+
         }
 
         llm_metadata = self.llm_page_analysis(minimized_html) # fetch page metadata
@@ -235,3 +240,57 @@ class PageAnalysisService:
         except Exception as e:
             self.logger.error(f"LLM page analysis failed: {str(e)}")
             return {}
+    def extract_forms(self):
+        """Extract form information from current page"""
+        forms = []
+        for form in self.driver.find_elements(By.TAG_NAME, 'form'):
+            form_data = {
+                "id": form.get_attribute('id'),
+                "action": form.get_attribute('action'),
+                "method": form.get_attribute('method'),
+                "inputs": [],
+                "buttons": []
+            }
+            
+            for inp in form.find_elements(By.TAG_NAME, 'input'):
+                form_data["inputs"].append({
+                    "type": inp.get_attribute('type'),
+                    "name": inp.get_attribute('name'),
+                    "id": inp.get_attribute('id')
+                })
+                
+            for btn in form.find_elements(By.TAG_NAME, 'button'):
+                form_data["buttons"].append({
+                    "type": btn.get_attribute('type'),
+                    "text": btn.text,
+                    "id": btn.get_attribute('id')
+                })
+                
+            forms.append(form_data)
+        return forms
+    
+    def extract_interactive_elements(self):
+        """Extract interactive elements from current page"""
+        return [{
+            "tag": el.tag_name,
+            "text": el.text[:50],
+            "id": el.get_attribute('id'),
+            "type": el.get_attribute('type')
+        } for el in self.driver.find_elements(By.CSS_SELECTOR, 
+                                            'button, a, input, select, textarea')]
+    def extract_data_tables(self):
+        """Extract table information from current page"""
+        return [{
+            "id": table.get_attribute('id'),
+            "headers": [th.text for th in table.find_elements(By.TAG_NAME, 'th')],
+            "row_count": len(table.find_elements(By.TAG_NAME, 'tr'))
+        } for table in self.driver.find_elements(By.TAG_NAME, 'table')]
+    
+    def identify_key_flows(self):
+        """Identify key user flows on current page"""
+        return {
+            "main_navigation": [a.get_attribute('href') for a in
+                              self.driver.find_elements(By.CSS_SELECTOR, 'nav a, .menu a')[:5]],
+            "primary_actions": [btn.text for btn in
+                              self.driver.find_elements(By.CSS_SELECTOR, '.primary-btn, .cta-button')]
+        }

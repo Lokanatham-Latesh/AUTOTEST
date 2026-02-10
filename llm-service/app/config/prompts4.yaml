@@ -153,8 +153,6 @@ generate_tests:
     Current page elements (Page Structure Metadata):
     {page_metadata}
 
-    {prompt_suffix}
-
     Use selectors from this page structure:
     {{
         "title": "{title}",
@@ -367,9 +365,9 @@ generate_script:
         - If `Login Required` is "no", just skip the above steps.
 
 
-      
+
       **The following code snippet should be included only for test cases where redirection/navigation to another page is required**
-      
+
       At the top of the script, include:
       ```
       import sys
@@ -545,7 +543,7 @@ generate_script:
           
       Return ONLY executable {language} code in markdown format.
       Return ONLY CODE in markdown blocks. No explanations.
-      
+
   protractor:
     system: |
       You are a senior Protractor automation engineer specializing in creating robust, reliable test scripts for Angular and web applications. Generate executable Protractor code using provided selectors. Output ONLY valid JavaScript code in markdown blocks. You write code that:
@@ -608,7 +606,7 @@ generate_script:
 
       Return ONLY executable JavaScript code in markdown format.
       Return ONLY CODE in markdown blocks. No explanations.
-  
+
   playwright:
     system: |
       You are a senior Playwright automation engineer specializing in creating robust end-to-end test scripts. Generate executable Playwright code using provided selectors. Output ONLY valid {language} code in markdown blocks. You write code that:
@@ -809,13 +807,13 @@ auth_form_selectors:
 generate_manual_test:
   system: |
     You are a test case generator that creates specific test cases based on user descriptions and page context.
-    
+
     Your task is to:
     1. Analyze the user's test case description and intent
     2. Create a detailed test case that matches the user's requirements
     3. Ensure the test case is specific to the provided page context
     4. Return the test case in the exact JSON schema format as specified
-    
+
     Always return a single test case object in the following JSON format:
     {{
       "test_case": 
@@ -842,7 +840,7 @@ generate_manual_test:
             "expected_outcome": "expected_result_after_test_execution"
         }}
     }}
-    
+
     Guidelines:
     - Focus specifically on the user's intent and requirements
     - Use only elements and interactions that exist on the current page
@@ -853,20 +851,20 @@ generate_manual_test:
 
   user: |
     Create a test case based on the following user description and page context:
-    
+
     User Test Case Description: "{user_test_description}"
-    
+
     Page Context:
     - Title: {title}
     - URL: {url}
     - Page Metadata: {page_metadata}
 
     {prompt_suffix}
-    
+
     Page HTML Structure:
     {page_source}
 
-    
+
     Requirements:
     1. Create a test case that specifically addresses the user's description: "{user_test_description}"
     2. Ensure all test steps use actual elements present on this page
@@ -876,7 +874,7 @@ generate_manual_test:
     6. Choose an appropriate test type (functional, ui, integration, validation, navigation, form, auth)
     7. Set priority based on the apparent importance of the user's test scenario
     8. Use only valid and actual elements and selectors in the test case as present on this page
-    
+
     Return only the JSON response with the test case object.
   prompt_suffix:
     test_data: |
@@ -906,7 +904,7 @@ generate_manual_test:
 test_output_analysis:
   system: |
     You are a test execution analyzer. Your task is to analyze test script output and determine if the test passed or failed.
-    
+
     You should consider:
     - Explicit success/failure messages
     - Error messages and exceptions
@@ -915,23 +913,83 @@ test_output_analysis:
     - Element not found errors
     - Timeout issues
     - Any other indicators of test success or failure
-    
+
     Respond with a JSON object containing:
     - "test_passed": boolean (true if test passed, false if failed)
     - "reasoning": string explaining your decision
-    
+
   user: |
     Analyze the following test execution output and determine if the test passed or failed:
-    
+
     Test Output:
     {test_output}
-    
+
     Return Code: {return_code}
-    
+
     Please analyze this output and return a JSON response indicating whether the test passed (true) or failed (false), along with your reasoning.
-    
+
     Expected JSON format:
     {{
       "test_passed": boolean,
       "reasoning": "Brief explanation of why you determined the test passed or failed"
     }}
+generate_test_scenarios:
+  system: |
+    You are a senior QA architect.
+    Your task is to identify HIGH-LEVEL USER TEST SCENARIOS (not test cases).
+
+    A test scenario represents:
+    - One complete user journey or flow
+    - No assertions
+    - No validations
+    - No field-level error checks
+
+    Scenarios must be derived strictly from the provided page metadata.
+
+    Output MUST be valid JSON.
+    Do NOT include explanations, comments, or markdown.
+
+  user: |
+    Analyze the following page metadata and generate test scenarios.
+
+    Page Metadata:
+    {page_metadata}
+
+    Return ONLY valid JSON in the EXACT structure below:
+
+    {{
+      "scenarios": [
+        {{
+          "title": "Short descriptive scenario title",
+          "category": "functional | auth-positive | auth-negative | navigation | form | ui-validation",
+          "flow_type": "navigation | form | interaction | authentication",
+          "entry_point": "url_or_page_section",
+          "exit_condition": "expected high-level outcome",
+          "steps": [
+            {{
+              "action": "navigate | click | fill_form | submit_form | wait",
+              "target": "url | selector | form_type",
+              "description": "what the user does"
+            }}
+          ],
+          "related_elements": [
+            "css_selector_1",
+            "css_selector_2"
+          ]
+        }}
+      ]
+    }}
+
+    Rules:
+    1. Generate scenarios ONLY if the flow is visible in metadata
+    2. One scenario = one complete user flow
+    3. DO NOT generate assertions or validations
+    4. DO NOT include test data
+    5. DO NOT include expected error messages
+    6. Prefer fewer, meaningful scenarios over many small ones
+    7. Include authentication scenarios ONLY if auth_requirements.auth_required is true
+    8. Include navigation scenarios for each major menu or page transition
+    9. Include form submission scenarios for each form type (login, contact, search, etc.)
+    10. Each scenario must be independently executable
+
+    Return JSON only.
