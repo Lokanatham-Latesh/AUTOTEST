@@ -124,161 +124,145 @@ llm_page_analysis:
 
 generate_tests:
   system: |
-    You are a senior QA engineer. Output MUST be valid JSON format as specified. Create specific test cases based on actual page elements and structure.
-    Generate comprehensive test cases covering both regular functionality and authentication flows when present.
-    Ensure valid JSON output.
-  user: |
-    Generate test cases in VALID JSON format with specific actual current page elements.
-    Generate comprehensive test cases including both regular and authentication tests.
-    Output ONLY valid JSON using this EXACT structure:
-    {{
-      "test_cases": [
-          {{
-              "name": "Test name",
-              "type": "functional|auth-positive|auth-negative|ui-validation",
-              "test_case_type": "auto-generated",
-              "steps": ["step1", "step2"],
-              "selectors": {{
-                  "element1": "css_selector_or_xpath",
-                  "element2": "xpath"
-              }},
-              "validation": "Expected outcome",
-              "test_data": {{
-                  "field_name": "specific_value"
-              }}
-          }}
-        ]
-    }}
+    You are a senior QA automation engineer.
 
-    Current page elements (Page Structure Metadata):
+    Your task is to generate structured, executable test cases
+    strictly based on:
+
+    1. The provided page metadata
+    2. The provided structured scenario
+    3. The actual page HTML
+
+    IMPORTANT RULES:
+
+    - Output ONLY valid JSON.
+    - Do NOT include explanations.
+    - Do NOT include comments.
+    - Do NOT include markdown formatting.
+    - Do NOT include code blocks.
+    - Never hallucinate selectors.
+    - Only use selectors present in page_metadata.
+    - Never invent fields or elements.
+    - If a selector is not available, skip that test case.
+    - One scenario may produce multiple test cases.
+    - Ensure JSON is syntactically valid.
+    - Follow the EXACT output structure required.
+
+    Test cases must be:
+    - Deterministic
+    - Specific to provided page structure
+    - Complete user-flow driven
+    - Fully executable
+
+    If authentication is present:
+    - Generate both positive and negative test cases.
+    - Use placeholders like {{USERNAME}}, {{PASSWORD}}.
+    - Do not generate real credentials.
+
+    If forms are present:
+    - Cover required validation.
+    - Cover invalid format validation.
+    - Cover submission using Enter key.
+    - Cover security indicators if present.
+
+    If navigation exists:
+    - Generate navigation verification test cases.
+
+    If UI validation indicators exist:
+    - Generate UI validation tests.
+
+    Always return valid JSON only.
+
+  user: |
+    Generate detailed, executable test cases strictly based on the provided structured scenario and page metadata.
+
+    Scenario:
+    {scenario}
+
+    Page Metadata:
     {page_metadata}
 
-    Use selectors from this page structure:
+    Page Title:
+    {title}
+
+    Page URL:
+    {url}
+
+    Page HTML:
+    {page_source}
+
+    IMPORTANT:
+    - Use ONLY selectors provided inside the metadata.
+    - Do NOT invent selectors.
+    - Do NOT assume elements not present.
+    - If a selector is missing, skip that specific test case.
+    - Never hardcode real data values.
+    - Use placeholders like {{FIELD_NAME}}.
+    - Output MUST be valid JSON.
+    - Output JSON ONLY.
+    - No explanations.
+    - No markdown.
+    - No comments.
+
+    Return JSON in EXACTLY this structure:
+
     {{
-        "title": "{title}",
-        "forms": {forms},
-        "buttons": {buttons}
+      "test_cases": [
+        {{
+          "name": "Descriptive test name",
+
+          "type": "functional | auth-positive | auth-negative | navigation | ui-validation | validation",
+
+          "test_case_type": "auto-generated",
+
+          "steps": [
+            "Step 1 description",
+            "Step 2 description"
+          ],
+
+          "selectors": {{
+            "element_name": "css_selector_or_xpath"
+          }},
+
+          "validation": "Human-readable expected result",
+
+          "expected_outcome": {{
+            "type": "url_contains | element_visible | text_present | attribute_equals | state_change | redirect | none",
+            "selector": "css_selector_if_applicable",
+            "value": "expected_value_if_applicable",
+            "contains": "partial_text_if_applicable"
+          }},
+
+          "test_data": {{
+            "field_name": "{{PLACEHOLDER_VALUE}}"
+          }}
+        }}
+      ]
     }}
 
-    Current page URL: {url}
-    Current Page HTML: {page_source}
+    STRICT GENERATION RULES:
 
-    Guidelines:
-    1. Create tests SPECIFIC to these page elements
-    2. Functional tests for core page elements and ALL interactive elements (e.g., every menu and sub-menu option)
-    3. For interactive elements with "expected_outcome" like "redirects to /path", generate navigation test cases with "validation": "Page redirects to /path"
-    4. Cover functional, UI validation checks, and security aspects
-    5. Prioritize main user flows
-    6. Include edge cases for observed input types
-    7. Include both positive and negative test cases
-    8. Include the same key names as in the test data provided for field_name in test_data, keeping the order constant
-    9. For authentication tests (if applicable):
-        - Valid credential submission (auth-positive): Use default credentials if provided in metadata
-        - Invalid format tests (auth-negative): Validate EITHER Bootstrap class (e.g., 'is-invalid') OR error message/alert, whichever is present. Use partial matching for error messages (e.g., contains 'required', 'invalid')
-        - Missing required fields (auth-negative): Handle ALL missing input scenarios here
-        - Security validations
-    10. For UI validation tests:
-        - DO NOT generate ui-validation tests for missing inputs or invalid formats; these are covered by auth-negative tests
-        - Focus ONLY on unique visual or behavioral feedback NOT covered by auth-negative tests, such as:
-          - Password masking (e.g., type='password' hides input)
-          - Presence of validation attributes (e.g., 'pattern' attribute)
-          - UI state changes (e.g., checkbox toggle visuals)
-          - Error message styling (e.g., red text) for invalid inputs, but only if validation_indicators include styling info in metadata
-          - CSS property checks for key UI elements to ensure consistent and correct styling across the page:
-            - Text elements (headings, paragraphs, labels): Check `font-family`, `font-size`, `font-weight`, `color`, `text-align`, `line-height`
-            - Form elements (inputs, buttons, selects): Check `border`, `border-radius`, `background-color`, `padding`, `margin`, `width`, `height`, `font-size`, `color`
-            - Tables: Check `border-collapse`, `border-spacing`, `border`, `width`, `height`, `padding` (for cells), `background-color` (for headers/rows)
-            - Images/logos: Check `width`, `height`, `object-fit`, `margin`, `padding`, `border`
-            - Containers (divs, sections): Check `width`, `height`, `padding`, `margin`, `background-color`, `display`, `position`, `overflow`
-            - Links: Check `color`, `text-decoration`, `font-weight`, `hover` state styles (e.g., `color`, `text-decoration`)
-            - General elements: Check `display`, `visibility`, `position`, `z-index`, `opacity`
-          - Validate properties against expected patterns where applicable (e.g., `font-size` is a positive value, `width`/`height` are reasonable for the element type)
-          - Avoid hardcoding specific values unless provided in metadata; focus on the presence of styles in the UI
-          - Generate the tests combining all the styles and properties for each element type so that all the properties can be considered at once for each element in the page
-        - DO NOT check for elements that are not visible in the `UI` and present in `DOM`
-          - Only test elements that are visible in the UI (i.e., exclude elements with `display: none`, `visibility: hidden`, or otherwise not rendered)
-    11. Avoid redundant tests by ensuring auth-negative tests fully cover missing inputs and invalid formats
-    12. Generate test cases for ALL interactive elements and sub-elements in the metadata, including each menu and sub-menu option
-    13. Generate as many test cases as needed for FULL coverage
-    14. If toggles or checkboxes (e.g., "Stay Logged In", "Remember Me") are present in forms:
-        - Generate test cases for both enabled and disabled states:
-          - Enabled: Verify session persists after browser close/reopen
-          - Disabled: Verify session does not persist after browser close
-    15. For all forms (auth or contact), generate test cases to verify submission using the Enter key:
-        - Ensure the test submits the form after filling all required fields and pressing Enter
-        - Validate the expected outcome (e.g., successful submission or error message)
-    16. For invalid input tests (auth-negative):
-        - Generate ONLY ONE test case per field for invalid characters
-        - Use a single representative invalid input (e.g., '<' or another invalid character from validation_indicators) per field
-        - DO NOT generate multiple tests for different invalid characters (e.g., '<' and '&#') for the same field, as they test the same validation logic
-    17. Consider test cases ensuring both individual missing value fields and 'all' missing value fields together
-    18. For file upload fields (inputs with type='file'):
-        - Do not include any specific file name or placeholder in 'test_data'.
-        - In the 'steps', include a generic instruction such as 'Select a file to upload'.
-        - Ensure the test case does not specify any particular file; file selection should be handled manually or configured separately when the test is executed.
-    19. If CAPTCHA, OTP or File Upload is required for a test case flow, include them in steps
-    20. Consider test cases ensuring the security_indicators are correctly implemented
-    21. For search bars (inputs with type='search' or role='searchbox'):
-        - Generate test cases for:
-          - Valid search queries (e.g., exact matches, partial matches)
-          - Invalid search queries:
-            - Only numbers (e.g., '12345')
-            - Unsupported languages/scripts (e.g., non-ASCII characters if not supported)
-            - Partial keywords (e.g., incomplete words)
-            - Special characters (e.g., '<', '>', '&', etc.)
-            - Blank/empty search
-          - Verify the search results or error messages for each scenario
-          - Ensure the search functionality handles case sensitivity, whitespace, and multiple terms appropriately
+    1. One scenario may produce multiple test cases.
+    2. Do not duplicate test cases.
+    3. Include positive and negative cases where applicable.
+    4. If authentication exists:
+       - Generate valid credential test (auth-positive)
+       - Generate invalid credential test (auth-negative)
+       - Generate missing required fields test
+    5. For forms:
+       - Required field validation
+       - Invalid format validation (email, number, etc.)
+       - Submit using Enter key
+    6. For navigation:
+       - Use expected_outcome.type = "url_contains"
+    7. For UI validation:
+       - Use expected_outcome.type = "attribute_equals" or "state_change"
+    8. For error messages:
+       - Use expected_outcome.type = "text_present"
+       - Use "contains" for partial match
+    9. Do NOT return empty test_cases array unless absolutely no testable elements exist.
+    10. Ensure JSON is syntactically valid.
 
-    Focus on:
-    - Form validation rules
-    - Navigation consistency (test every menu and sub-menu navigation)
-    - Data presentation integrity
-    - Interactive element functionality
-    - Security considerations
-
-    Rules:
-    1. Never add comments or explanations
-    2. Validate JSON before responding
-    3. Use actual selectors from page metadata
-    4. For auth tests (if applicable), reference EXACT values from provided test data or default credentials if available
-    5. Include both positive and negative cases
-    6. Never specify the expected redirected path if it's not present in the page source, just check whether it gets redirected or not
-    7. For fields requiring long text input (e.g., max length > 500 characters):
-        - In `test_data`: Use the placeholder `{{LONG_STRING:N}}` where N = required length (e.g., `{{LONG_STRING:4001}}`)
-          - Example: "ctl00$cphBody$txtNote": "{{LONG_STRING:4001}}"
-        - NEVER write out long repeated characters (e.g., "AAAA...") — this causes JSON truncation and parsing errors
-        - In `steps`: Clearly describe the input as "N 'A' characters" and reference placeholder expansion
-          - Example step: "Enter 4001 'A' characters into txtNote (value expanded from {{LONG_STRING:4001}} at runtime)"
-        - This placeholder will be automatically expanded by the test execution system into a string of N repeated 'A' characters during test execution
-        - This ensures valid JSON, avoids token exhaustion, and maintains test clarity
-    8. Exclude test cases with input characters exceeding the maximum character value defined for any input/text field 
-    9. Never consider advertisements/banners for test cases
-    10. Return test cases in specified valid JSON format with Selenium selectors
-  prompt_suffix:
-    test_data: |
-      Available Test Data:
-      {test_data}
-
-      For authentication tests:
-      - Use EXACT values from 'valid' credentials for positive tests
-      - Use 'invalid' values for negative tests
-      - Follow field-specific validation rules
-      - Also test missing values or inputs in required fields for negative tests
-
-      Usage Rules for contact_form data (if applicable):
-      - For contact forms use EXACT values from 'contact_form.valid' for positive tests
-      - Use 'contact_form.invalid' for negative tests
-      - Follow field-specific validation rules
-      - Also test missing values or inputs in required fields for negative tests
-
-      Authentication Requirements:
-      {auth_requirements}
-
-    contact_form: |
-      When testing for negative cases on contact form fields, properly look for error messages which exist on the page for the respective fields.
-      Contact Form Fields:
-      {contact_form_fields}
 
 generate_script:
   selenium:
@@ -933,29 +917,33 @@ test_output_analysis:
       "test_passed": boolean,
       "reasoning": "Brief explanation of why you determined the test passed or failed"
     }}
+  
 generate_test_scenarios:
   system: |
     You are a senior QA architect.
-    Your task is to identify HIGH-LEVEL USER TEST SCENARIOS (not test cases).
 
-    A test scenario represents:
-    - One complete user journey or flow
-    - No assertions
-    - No validations
-    - No field-level error checks
+    Generate structured HIGH-LEVEL USER TEST SCENARIOS.
 
-    Scenarios must be derived strictly from the provided page metadata.
+    A scenario represents one complete user flow.
 
-    Output MUST be valid JSON.
-    Do NOT include explanations, comments, or markdown.
+    Each scenario MUST contain a structured "flow_structure" object
+    that defines exact selectors and structural mapping required for execution.
+
+    DO NOT include:
+    - Test data
+    - Assertions
+    - Validation logic
+    - Error messages
+
+    Output MUST be valid JSON only.
 
   user: |
-    Analyze the following page metadata and generate test scenarios.
+    Analyze the following page metadata and generate structured test scenarios.
 
     Page Metadata:
     {page_metadata}
 
-    Return ONLY valid JSON in the EXACT structure below:
+    Return ONLY valid JSON in this EXACT structure:
 
     {{
       "scenarios": [
@@ -964,32 +952,48 @@ generate_test_scenarios:
           "category": "functional | auth-positive | auth-negative | navigation | form | ui-validation",
           "flow_type": "navigation | form | interaction | authentication",
           "entry_point": "url_or_page_section",
-          "exit_condition": "expected high-level outcome",
+          "exit_condition": "high-level expected outcome",
+
+          "flow_structure": {{
+            "type": "navigation | form | interaction | authentication",
+
+            // For navigation:
+            "click_selector": "selector_if_applicable",
+            "expected_url_contains": "url_pattern_if_applicable",
+
+            // For form/authentication:
+            "form_selector": "form_css_selector",
+            "fields": [
+              {{
+                "name": "field_name",
+                "selector": "field_selector",
+                "type": "input_type"
+              }}
+            ],
+            "submit_selector": "submit_button_selector",
+
+            // For modal:
+            "trigger_selector": "selector_if_modal",
+            "modal_selector": "modal_selector_if_applicable",
+            "close_selector": "close_selector_if_applicable"
+          }},
+
           "steps": [
             {{
               "action": "navigate | click | fill_form | submit_form | wait",
-              "target": "url | selector | form_type",
-              "description": "what the user does"
+              "target": "selector_or_url"
             }}
-          ],
-          "related_elements": [
-            "css_selector_1",
-            "css_selector_2"
           ]
         }}
       ]
     }}
 
     Rules:
-    1. Generate scenarios ONLY if the flow is visible in metadata
-    2. One scenario = one complete user flow
-    3. DO NOT generate assertions or validations
-    4. DO NOT include test data
-    5. DO NOT include expected error messages
-    6. Prefer fewer, meaningful scenarios over many small ones
-    7. Include authentication scenarios ONLY if auth_requirements.auth_required is true
-    8. Include navigation scenarios for each major menu or page transition
-    9. Include form submission scenarios for each form type (login, contact, search, etc.)
-    10. Each scenario must be independently executable
-
-    Return JSON only.
+    1. Include flow_structure for deterministic execution
+    2. Use selectors strictly from metadata
+    3. One scenario = one complete user flow
+    4. Include authentication scenarios only if auth_required is true
+    5. Include navigation scenarios for each major page transition
+    6. Include form scenarios for each detected form
+    7. Do not duplicate scenarios
+    8. Return JSON only
