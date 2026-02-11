@@ -26,12 +26,6 @@ class TestScenarioService:
             except KeyError as e:
                  self.logger.error(f"Prompt placeholder error: {e}")
                  raise
-            # user_prompt = self.prompt_manager.get_prompt(
-            #     "generate_test_scenarios", "user"
-            # ).format(
-            #     page_metadata=page.page_metadata
-            # )
-
             result = self.llm.generate(system_prompt, user_prompt, model_type="analysis")
             scenarios = self._parse(result)
 

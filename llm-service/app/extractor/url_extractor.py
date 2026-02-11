@@ -1,6 +1,7 @@
 """
-URL Extractor module for recursive URL discovery
+URL Extractor module for recursive URL discovery (Unlimited BFS)
 """
+
 import time
 from urllib.parse import urlparse, urljoin
 from selenium.webdriver.common.by import By
@@ -9,150 +10,128 @@ from selenium.webdriver.support import expected_conditions as EC
 
 
 class URLExtractor:
-    """Class for extracting URLs from web pages recursively"""
-    
+    """Recursive URL extractor with filtering (no max limit)"""
+
+    BLOCKED_EXTENSIONS = {
+        ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp",
+        ".pdf", ".txt", ".csv", ".json", ".xml",
+        ".zip", ".rar", ".7z",
+        ".mp4", ".webm", ".avi",
+        ".doc", ".docx", ".xls", ".xlsx",
+        ".bin"
+    }
+
+    BLOCKED_PATH_KEYWORDS = {
+        "/download/",
+        "/uploads/",
+        "/files/",
+        "/assets/",
+        "/static/",
+        "/media/"
+    }
+
     def __init__(self, driver, logger=None):
-        """
-        Initialize URL extractor
-        
-        Args:
-            driver: Selenium WebDriver instance
-            logger: Logger instance (optional)
-        """
         self.driver = driver
-        self.logger = logger 
-        
+        self.logger = logger
+
+    # ---------------------------------------------------------
+    # Public Method
+    # ---------------------------------------------------------
     def extract_urls(self, base_url):
         """
-        Recursively extract unique internal URLs with BFS up to max_depth
-        
-        Args:
-            base_url (str): Base URL to start extraction from
-            max_depth (int): Maximum depth for recursive extraction
-            
-        Returns:
-            list: Sorted list of unique URLs found
+        Recursively extract all unique internal HTML URLs using BFS
         """
-        self.logger.info(f"Starting recursive URL extraction from: {base_url}")
-        
+
+        if self.logger:
+            self.logger.info(f"Starting recursive URL extraction from: {base_url}")
+
         try:
             parsed_base = urlparse(base_url)
             base_domain = parsed_base.netloc
+
             visited = set()
-            to_visit = [base_url]  
+            to_visit = [self.normalize_url(base_url)]
 
             while to_visit:
-                current_url = to_visit.pop(0)
-                
-                if current_url in visited :
-                    continue
-                
-                try:
-                    self.logger.debug(f"Waiting 1 sec. before processing {current_url}")
-                    time.sleep(1)
-                    self.driver.get(current_url)
-                    WebDriverWait(self.driver, 10).until(
-                        EC.presence_of_element_located((By.TAG_NAME, 'body'))
-                    )
-                    visited.add(current_url)
-                    self.logger.info(f"Processing : {current_url}")
 
-                    # Extract links from current page
-                    links = self.driver.find_elements(By.TAG_NAME, 'a')
-                    new_urls = set()
+                current_url = to_visit.pop(0)
+
+                if current_url in visited:
+                    continue
+
+                try:
+                    time.sleep(1)
+
+                    self.driver.get(current_url)
+
+                    WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "body"))
+                    )
+
+                    visited.add(current_url)
+
+                    if self.logger:
+                        self.logger.info(f"Processing : {current_url}")
+
+                    links = self.driver.find_elements(By.TAG_NAME, "a")
 
                     for link in links:
-                        href = link.get_attribute('href')
+                        href = link.get_attribute("href")
                         if not href:
                             continue
-                            
+
                         full_url = urljoin(current_url, href)
-                        parsed_url = urlparse(full_url)
-                        
+                        normalized_url = self.normalize_url(full_url)
+
+                        parsed_url = urlparse(normalized_url)
+
                         if parsed_url.netloc != base_domain:
                             continue
 
-                        path = parsed_url.path.rstrip("/") or "/"
-                        clean_url = f"{parsed_url.scheme}://{parsed_url.netloc}{path}"
+                        if self.is_extension_url(normalized_url):
+                            if self.logger:
+                                self.logger.debug(f"Skipping extension URL: {normalized_url}")
+                            continue
 
-                        if clean_url not in visited and clean_url not in to_visit:
-                            to_visit.append(clean_url)
-                         
+                        if self.is_blocked_path(normalized_url):
+                            if self.logger:
+                                self.logger.debug(f"Skipping blocked path: {normalized_url}")
+                            continue
+
+                        if normalized_url not in visited and normalized_url not in to_visit:
+                            to_visit.append(normalized_url)
+
                 except Exception as e:
-                    self.logger.error(f"Failed to process {current_url}: {str(e)}")
+                    if self.logger:
+                        self.logger.error(f"Failed to process {current_url}: {str(e)}")
 
-            self.logger.info(f"Total unique URLs found: {len(visited)}")
-
-            for url in visited:
-                self.logger.debug(f"Found URL: {url}")
+            if self.logger:
+                self.logger.info(f"Total unique HTML URLs found: {len(visited)}")
 
             return sorted(visited)
-            
+
         except Exception as e:
-            self.logger.error(f"URL extraction failed: {str(e)}")
+            if self.logger:
+                self.logger.error(f"URL extraction failed: {str(e)}")
             return []
-    
-    def extract_links_from_page(self, url):
-        """
-        Extract all links from a single page
-        
-        Args:
-            url (str): URL to extract links from
-            
-        Returns:
-            list: List of href attributes found on the page
-        """
-        try:
-            self.driver.get(url)
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, 'body'))
-            )
-            
-            links = self.driver.find_elements(By.TAG_NAME, 'a')
-            hrefs = []
-            
-            for link in links:
-                href = link.get_attribute('href')
-                if href:
-                    hrefs.append(href)
-                    
-            self.logger.debug(f"Found {len(hrefs)} links on {url}")
-            return hrefs
-            
-        except Exception as e:
-            self.logger.error(f"Failed to extract links from {url}: {str(e)}")
-            return []
-    
-    def is_internal_url(self, url, base_domain):
-        """
-        Check if URL belongs to the same domain
-        
-        Args:
-            url (str): URL to check
-            base_domain (str): Base domain to compare against
-            
-        Returns:
-            bool: True if URL is internal, False otherwise
-        """
-        try:
-            parsed_url = urlparse(url)
-            return parsed_url.netloc == base_domain
-        except Exception:
-            return False
-    
-    def normalize_url(self, url):
-        """
-        Normalize URL by removing fragments and normalizing path
-        
-        Args:
-            url (str): URL to normalize
-            
-        Returns:
-            str: Normalized URL
-        """
+
+    # ---------------------------------------------------------
+    # Helper Methods
+    # ---------------------------------------------------------
+
+    def is_extension_url(self, url: str) -> bool:
+        parsed = urlparse(url)
+        path = parsed.path.lower()
+        return any(path.endswith(ext) for ext in self.BLOCKED_EXTENSIONS)
+
+    def is_blocked_path(self, url: str) -> bool:
+        lower_url = url.lower()
+        return any(keyword in lower_url for keyword in self.BLOCKED_PATH_KEYWORDS)
+
+    def normalize_url(self, url: str) -> str:
         try:
             parsed = urlparse(url)
-            path = parsed.path.rstrip('/') or '/'
+            path = parsed.path.rstrip("/") or "/"
             return f"{parsed.scheme}://{parsed.netloc}{path}"
         except Exception:
             return url

@@ -138,7 +138,6 @@ function RowActions() {
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuItem>Edit Site Title</DropdownMenuItem>
         <DropdownMenuItem>Navigate to Site</DropdownMenuItem>
-        <DropdownMenuItem>Cache mode: No-cache</DropdownMenuItem>
         <DropdownMenuItem className="text-destructive">Delete Site</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

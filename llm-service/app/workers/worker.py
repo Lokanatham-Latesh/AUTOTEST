@@ -182,16 +182,16 @@ class WorkerService:
                 page_id,
                 requested_by
             )
-            # await rabbitmq_producer.publish_message(
-            #     settings.TEST_CASE_QUEUE,
-            #     {
-            #         "event": "TEST_CASE_GENERATE",
-            #         "page_id": page_id,
-            #         "requested_by": requested_by,
-            #         "timestamp": datetime.utcnow().isoformat()
-            #     },
-            #     priority=5
-            # )
+            await rabbitmq_producer.publish_message(
+                settings.TEST_CASE_QUEUE,
+                {
+                    "event": "TEST_CASE_GENERATE",
+                    "page_id": page_id,
+                    "requested_by": requested_by,
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                priority=5
+            )
             logger.info(f"[TEST_SCENARIO] Completed | page_id={page_id}")
         except Exception as e:
             logger.exception("[TEST_SCENARIO] Failed")
