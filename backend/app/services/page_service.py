@@ -1,17 +1,53 @@
+from datetime import datetime
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, asc, desc
-
 from shared_orm.models.page import Page
 from shared_orm.models.site import Site
 from shared_orm.models.user import User
 from sqlalchemy import func
 from shared_orm.models.test_case import TestCase
 from shared_orm.models.test_scenario import TestScenario
+from shared_orm.models.page_link import PageLink
 from app.schemas.page_schema import PageInfoResponse
+from app.config.logger import logger
 
 
 class PageService:
+
+
+    def create_page(
+    self,
+    page_title: str | None,
+    page_url: str,
+    db: Session,
+    user: User
+):
+        logger.info(f"[CREATE_PAGE_REQUEST] User={user.id} URL={page_url}")
+        if not page_url or not page_url.strip():
+            logger.warning("[CREATE_PAGE_FAILED] Empty page_url")
+            raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Page URL is required"
+        )
+        new_page = Page(
+        page_title=page_title.strip() if page_title else None,
+        page_url=page_url.strip(),
+        site_id=None,                
+        status="new",
+        created_on=datetime.utcnow(),
+        created_by=user.id,
+        updated_on=None,
+        updated_by=None,
+        page_source=None,
+        page_metadata=None
+    )
+        db.add(new_page)
+        db.commit()
+        db.refresh(new_page)
+        logger.info(f"[CREATE_PAGE_SUCCESS] PageID={new_page.id}")
+        return new_page
+    
 
     # -------------------------------
     # Pages WITHOUT site
@@ -25,6 +61,7 @@ class PageService:
         sort: str,
         user: User
     ):
+        logger.info(f"[LIST_UNLINKED_PAGES] User={user.id} Page={page} Limit={limit} Search={search} Sort={sort}")
         query = db.query(Page).filter(Page.site_id.is_(None))
 
         if search:
@@ -46,7 +83,7 @@ class PageService:
 
         total = query.count()
         pages = query.offset((page - 1) * limit).limit(limit).all()
-
+        logger.info(f"[LIST_UNLINKED_PAGES_SUCCESS] Total={total}")
         return total, pages
 
     # -------------------------------
@@ -64,6 +101,7 @@ class PageService:
     ):
         site = db.query(Site).filter(Site.id == site_id).first()
         if not site:
+            logger.warning(f"[GET_PAGES_BY_SITE_FAILED] Site not found | SiteID={site_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Site not found"
@@ -90,6 +128,7 @@ class PageService:
 
         total = query.count()
         pages = query.offset((page - 1) * limit).limit(limit).all()
+        logger.info(f"[GET_PAGES_BY_SITE_SUCCESS] SiteID={site_id} Total={total}")
 
         return total, pages
     def get_page_info(
@@ -100,8 +139,9 @@ class PageService:
         site_id: int | None = None
     ) -> PageInfoResponse:
 
-        
+        logger.info(f"[GET_PAGE_INFO] User={user.id} PageID={page_id} SiteID={site_id}")
         if not page_id:
+            logger.warning("[GET_PAGE_INFO_FAILED] page_id missing")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="page_id is required"
@@ -109,6 +149,7 @@ class PageService:
 
         page = db.query(Page).filter(Page.id == page_id).first()
         if not page:
+            logger.warning(f"[GET_PAGE_INFO_FAILED] Page not found | PageID={page_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Page not found"
@@ -116,6 +157,7 @@ class PageService:
 
         if site_id is not None:
             if page.site_id != site_id:
+                logger.warning(f"[GET_PAGE_INFO_FAILED] Page does not belong to site | PageID={page_id}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Page does not belong to the given site"
@@ -123,6 +165,7 @@ class PageService:
                 
         else:
             if page.site_id is not None:
+                logger.warning(f"[GET_PAGE_INFO_FAILED] Page already linked | PageID={page_id}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="This page is already linked to a site and is not a normal page"
@@ -137,6 +180,8 @@ class PageService:
             .scalar()
 
         scheduled_test_case_count = 0
+        logger.info(f"[GET_PAGE_INFO_SUCCESS] PageID={page_id}")
+
 
         return PageInfoResponse(
             page_id=page.id,
@@ -149,3 +194,62 @@ class PageService:
             test_case_count=test_case_count or 0,
             scheduled_test_case_count=scheduled_test_case_count
         )
+    
+    def delete_page(self, page_id: int, db: Session, user: User):
+        logger.info(f"[DELETE_PAGE_REQUEST] User={user.id} PageID={page_id}")
+
+        
+        page = db.query(Page).filter(Page.id == page_id).first()
+        if not page:
+            logger.warning(f"[DELETE_PAGE_FAILED] Page not found | PageID={page_id}")
+            raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Page not found")
+        
+        db.query(TestCase).filter(
+        TestCase.page_id == page.id).delete(synchronize_session=False)
+        db.query(TestScenario).filter(
+        TestScenario.page_id == page.id).delete(synchronize_session=False)
+        db.query(PageLink).filter(
+        or_(
+            PageLink.page_id_source == page.id,
+            PageLink.page_id_target == page.id
+        )
+    ).delete(synchronize_session=False)
+        db.delete(page)
+        db.commit()
+        logger.info(f"[DELETE_PAGE_SUCCESS] PageID={page_id} Deleted successfully")
+
+    def update_page_title(
+        self,
+        page_id: int,
+        new_title: str,
+        db: Session,
+        user: User
+    ):
+        logger.info(f"[UPDATE_PAGE_TITLE_REQUEST] User={user.id} PageID={page_id}")
+        if not new_title or not new_title.strip():
+            logger.warning(f"[UPDATE_PAGE_TITLE_FAILED] Empty title | PageID={page_id}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Page title cannot be empty"
+            )
+        page = db.query(Page).filter(Page.id == page_id).first()
+        if not page:
+            logger.warning(f"[UPDATE_PAGE_TITLE_FAILED] Page not found | PageID={page_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Page not found"
+            )
+        old_title = page.page_title
+        page.page_title = new_title.strip()
+        page.updated_on = datetime.utcnow()
+        page.updated_by= user.id
+        db.commit()
+        db.refresh(page)
+        logger.info(
+            f"[UPDATE_PAGE_TITLE_SUCCESS] PageID={page_id} "
+            f"OldTitle='{old_title}' NewTitle='{page.page_title}'"
+        )
+        return page
+    

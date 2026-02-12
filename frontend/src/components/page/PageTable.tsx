@@ -4,13 +4,19 @@ import { StatusPill } from '@/components/table/StatusPill'
 import { AnalyzeButton } from '@/components/table/AnalyzeButton'
 import { formatDateDDMMYYYY } from '@/utils/helper'
 import type { Page } from '@/utils/apis/pageApi'
+import { useState } from 'react'
+import { EditPageTitleDialog } from './EditPageTitleDialog'
+import type { TableAction } from '../table/types'
 
 type Props = {
   data: Page[]
+  onDelete: (pageId: number) => void
 }
 
-export function PageTable({ data }: Props) {
+export function PageTable({ data, onDelete }: Props) {
   const navigate = useNavigate()
+  const [editOpen, setEditOpen] = useState(false)
+  const [selectedPage, setSelectedPage] = useState<Page | null>(null)
 
   const columns = [
     {
@@ -60,21 +66,29 @@ export function PageTable({ data }: Props) {
     },
   ]
 
-  const actions = [
-    {
-      label: 'Edit Page Title',
-      onClick: (p: Page) => console.log('edit', p.id),
+
+const actions: TableAction<Page>[] = [
+  {
+    label: 'Edit Page Title',
+    onClick: (p: Page) => {
+      setSelectedPage(p)
+      setEditOpen(true)
     },
-    {
-      label: 'View Test Scenario',
-      onClick: (p: Page) => navigate(`/page-info/${p.id}`),
-    },
-    {
-      label: 'Delete Page',
-      destructive: true,
-      onClick: (p: Page) => console.log('delete', p.id),
-    },
-  ]
+  },
+  {
+    label: 'View Page Info',
+    onClick: (p: Page) => navigate(`/page-info/${p.id}`),
+  },
+  {
+    label: 'View Test Scenario',
+    onClick: (p: Page) => navigate(`/page-info/${p.id}`),
+  },
+  {
+    label: 'Delete Page',
+    destructive: true,
+    onClick: (p: Page) => onDelete(p.id),
+  },
+]
 
   function handlePlay(page: Page) {
     console.log('START ANALYSIS', page.id)
@@ -85,12 +99,18 @@ export function PageTable({ data }: Props) {
   }
 
   return (
-    <DynamicTable
-      data={data}
-      columns={columns}
-      actions={actions}
-      getRowKey={(p) => p.id}
-      onRowClick={(p) => navigate(`/page-info/${p.id}`)}
-    />
+    <>
+      <DynamicTable data={data} columns={columns} actions={actions} getRowKey={(p) => p.id} />
+
+      <EditPageTitleDialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open)
+          if (!open) setSelectedPage(null)
+        }}
+        pageId={selectedPage?.id ?? null}
+        currentTitle={selectedPage?.page_title}
+      />
+    </>
   )
 }

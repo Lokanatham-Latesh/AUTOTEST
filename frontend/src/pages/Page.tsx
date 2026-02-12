@@ -5,7 +5,9 @@ import { Pagination } from '@/components/common/Pagination'
 import type { SortType } from '@/types'
 import { AddPageSheet } from '@/components/page/AddPageDialog'
 import { PageTable } from '@/components/page/PageTable'
-import { useUnlinkedPagesQuery } from '@/utils/queries/pageQueries'
+import { useCreatePageMutation, useUnlinkedPagesQuery } from '@/utils/queries/pageQueries'
+import { useDeletePageMutation } from '@/utils/queries/pageQueries'
+import { toast } from 'sonner'
 
 const Pages = () => {
   const [search, setSearch] = useState('')
@@ -20,11 +22,42 @@ const Pages = () => {
     search,
     sort,
   })
+  const deletePageMutation = useDeletePageMutation()
+  const createPageMutation = useCreatePageMutation()
 
-  const handleAdd = (values: { title: string; url: string }) => {
-    console.log('Add page:', values)
-    setOpenAdd(false)
+
+const handleAdd = (values: { title: string; url: string }) => {
+  createPageMutation.mutate(
+    {
+      page_title: values.title,
+      page_url: values.url,
+    },
+    {
+      onSuccess: () => {
+        toast.success('Page created successfully')
+        setOpenAdd(false)
+      },
+      onError: (error: any) => {
+        toast.error(error?.response?.data?.detail || 'Failed to create page')
+      },
+    },
+  )
+}
+
+
+  const handleDeletePage = (pageId: number) => {
+    if (!confirm('Are you sure you want to delete this page?')) return
+
+    deletePageMutation.mutate(pageId, {
+      onSuccess: () => {
+        toast.success('Page deleted successfully')
+      },
+      onError: (error: any) => {
+        toast.error(error?.response?.data?.detail || 'Failed to delete page')
+      },
+    })
   }
+
 
   return (
     <div className="flex h-full flex-col">
@@ -44,7 +77,12 @@ const Pages = () => {
           Add New Page
         </Button>
 
-        <AddPageSheet open={openAdd} onOpenChange={setOpenAdd} onSubmit={handleAdd} />
+        <AddPageSheet
+          open={openAdd}
+          onOpenChange={setOpenAdd}
+          onSubmit={handleAdd}
+          isLoading={createPageMutation.isPending}
+        />
       </SearchBar>
 
       {isLoading ? (
@@ -53,7 +91,7 @@ const Pages = () => {
         </div>
       ) : (
         <>
-          <PageTable data={data?.data ?? []} />
+          <PageTable data={data?.data ?? []} onDelete={handleDeletePage} />
 
           <Pagination
             currentPage={page}

@@ -15,9 +15,10 @@ type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (values: FormValues) => void
+  isLoading?: boolean
 }
 
-export function AddPageSheet({ open, onOpenChange, onSubmit }: Props) {
+export function AddPageSheet({ open, onOpenChange, onSubmit, isLoading }: Props) {
   const {
     register,
     handleSubmit,
@@ -82,8 +83,12 @@ export function AddPageSheet({ open, onOpenChange, onSubmit }: Props) {
               >
                 Cancel
               </Button>
-              <Button type="submit" className="bg-red-600 hover:bg-red-700 cursor-pointer">
-                Add
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="bg-red-600 hover:bg-red-700 cursor-pointer"
+              >
+                {isLoading ? 'Adding...' : 'Add'}
               </Button>
             </div>
           </SheetFooter>

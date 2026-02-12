@@ -14,6 +14,7 @@ from shared_orm.models.test_scenario import TestScenario
 from shared_orm.models.test_case import TestCase
 from shared_orm.models.test_suite import TestSuite
 from shared_orm.models.page import Page
+from shared_orm.models.page_link import PageLink
 
 
 class SiteService:
@@ -114,7 +115,22 @@ class SiteService:
         return site
 
     def delete_site(self, site_id: int, db: Session, user: User):
-        site = self.get_site_by_id(site_id, db)
+        site = self.get_site_by_id(site_id, db, user)
+        pages = db.query(Page).filter(Page.site_id == site.id).all()
+        for page in pages:
+            db.query(TestCase).filter(
+             TestCase.page_id == page.id
+            ).delete(synchronize_session=False)
+            db.query(TestScenario).filter(
+            TestScenario.page_id == page.id
+            ).delete(synchronize_session=False)
+            db.query(PageLink).filter(
+            PageLink.page_id_source == page.id
+        ).delete(synchronize_session=False)
+            db.query(PageLink).filter(
+            PageLink.page_id_target == page.id
+        ).delete(synchronize_session=False)
+            db.delete(page)
         db.delete(site)
         db.commit()
 

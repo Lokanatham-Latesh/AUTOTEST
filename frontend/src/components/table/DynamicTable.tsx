@@ -101,7 +101,7 @@ function RowActions<T>({ row, actions }: { row: T; actions: TableAction<T>[] }) 
           <DropdownMenuItem
             key={action.label}
             disabled={action.disabled?.(row)}
-            className={cn(action.destructive && 'text-destructive')}
+            className={cn('cursor-pointer', action.destructive && 'text-destructive')}
             onClick={(e) => {
               e.stopPropagation()
               action.onClick(row)
