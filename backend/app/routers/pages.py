@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.page_schema import PaginatedPageResponse,PageInfoResponse
+from app.schemas.page_schema import PaginatedPageResponse,PageInfoResponse, PageUpdateTitleRequest, PageCreateRequest
 from app.services.page_service import PageService
 from app.middleware.auth_middleware import auth_required
 from shared_orm.models.user import User
@@ -59,6 +59,61 @@ def get_page_info(
         db=db,
         user=user
     )
+
+@router.delete(
+    "/{page_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a page",
+    description="Permanently deletes a page and all linked test scenarios, test cases, and navigation data."
+)
+def delete_page(
+    page_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required)
+):
+    page_service.delete_page(
+        page_id=page_id,
+        db=db,
+        user=current_user
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.patch(
+    "/{page_id}/title",
+    summary="Update page title",
+    description="Update the title of a page"
+)
+def update_page_title(
+    page_id: int,
+    payload: PageUpdateTitleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required)
+):
+    return page_service.update_page_title(
+        page_id=page_id,
+        new_title=payload.page_title,
+        db=db,
+        user=current_user
+    )
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create new unlinked page"
+)
+def create_page(
+    payload: PageCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required)
+):
+    return page_service.create_page(
+        page_title=payload.page_title,
+        page_url=payload.page_url,
+        db=db,
+        user=current_user
+    )
+
+
+
 
 
 

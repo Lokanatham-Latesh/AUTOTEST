@@ -85,6 +85,19 @@ export const useCreateSiteMutation = () => {
   })
 }
 
+export const useDeleteSiteMutation = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (siteId: number) => siteApi.deleteSite(siteId),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sites'] })
+    },
+  })
+}
+
+
 export const useSitePagesQuery = ({
   siteId,
   page,

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -133,6 +133,7 @@ def delete_site(
     - **site_id**: ID of the site
     """
     site_service.delete_site(site_id, db, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     
 @router.get(

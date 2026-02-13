@@ -26,3 +26,12 @@ export interface GetPageInfoParams {
   page_id: number
   site_id?: number
 }
+
+export interface CreatePagePayload {
+  page_title?: string
+  page_url: string
+}
+
+export interface UpdatePageTitlePayload {
+  page_title: string
+}

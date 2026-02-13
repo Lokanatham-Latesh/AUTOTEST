@@ -108,4 +108,7 @@ export const siteApi = {
     const { data } = await api.get(`/sites/${siteId}/info`)
     return data
   },
+  deleteSite: async (siteId: number): Promise<void> => {
+    await api.delete(`/sites/${siteId}`)
+  },
 }

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, Field
 
 
 class PageCreate(BaseModel):
@@ -40,4 +40,11 @@ class PageInfoResponse(BaseModel):
     test_scenario_count: int
     test_case_count: int
     scheduled_test_case_count: int
+
+class PageUpdateTitleRequest(BaseModel):
+    page_title: str = Field(..., min_length=1, max_length=255)
+    
+class PageCreateRequest(BaseModel):
+    page_title: Optional[str] = None
+    page_url: str
 

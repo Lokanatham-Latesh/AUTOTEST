@@ -5,7 +5,8 @@ import type { SortType } from '@/types'
 import { SitePageTable } from './SitePageTable'
 import { useSitePagesQuery } from '@/utils/queries/sitesQuery'
 import { useParams } from 'react-router-dom'
-
+import { useDeletePageMutation } from '@/utils/queries/pageQueries'
+import { toast } from 'sonner'
 const SitePages = () => {
   const { id } = useParams<{ id: string }>()
   const siteId = Number(id)
@@ -21,6 +22,20 @@ const SitePages = () => {
     search,
     sort,
   })
+  const deletePageMutation = useDeletePageMutation()
+
+  const handleDeletePage = (pageId: number) => {
+    if (!confirm('Are you sure you want to delete this page?')) return
+
+    deletePageMutation.mutate(pageId, {
+      onSuccess: () => {
+        toast.success('Page deleted successfully')
+      },
+      onError: (error: any) => {
+        toast.error(error?.response?.data?.detail || 'Failed to delete page')
+      },
+    })
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -54,7 +69,7 @@ const SitePages = () => {
       {/* Data */}
       {!isLoading && !isError && (
         <>
-          <SitePageTable data={data?.data ?? []} />
+          <SitePageTable data={data?.data ?? []} onDelete={handleDeletePage} />
 
           <Pagination
             currentPage={page}

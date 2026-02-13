@@ -5,8 +5,19 @@ import { formatDateDDMMYYYY } from '@/utils/helper'
 import type { Page } from '@/utils/apis/siteApi'
 import { StatusPill } from '../table/StatusPill'
 import { AnalyzeButton } from '../table/AnalyzeButton'
+import { useState } from 'react'
+import { EditPageTitleDialog } from '../page/EditPageTitleDialog'
 
-export function SitePageTable({ data }: { data: Page[] }) {
+export function SitePageTable({
+  data,
+  onDelete,
+}: {
+  data: Page[]
+  onDelete: (pageId: number) => void
+}) {
+  const [editOpen, setEditOpen] = useState(false)
+  const [selectedPage, setSelectedPage] = useState<Page | null>(null)
+
   const navigate = useNavigate()
 
   const columns = [
@@ -67,7 +78,15 @@ export function SitePageTable({ data }: { data: Page[] }) {
   const actions = [
     {
       label: 'Edit Page Title',
-      onClick: (p: Page) => console.log('edit', p.id),
+      onClick: (p: Page) => {
+        setSelectedPage(p)
+        setEditOpen(true)
+      },
+    }
+    ,
+    {
+      label: 'View Page Info',
+      onClick: (p: Page) => navigate(`/page-info/${p.id}?site_id=${p.site_id}`),
     },
     {
       label: 'View Test Scenario',
@@ -76,7 +95,7 @@ export function SitePageTable({ data }: { data: Page[] }) {
     {
       label: 'Delete Page',
       destructive: true,
-      onClick: (p: Page) => console.log('delete', p.id),
+      onClick: (p: Page) => onDelete(p.id),
     },
   ]
 
@@ -88,13 +107,17 @@ export function SitePageTable({ data }: { data: Page[] }) {
     console.log('PAUSE ANALYSIS', page.id)
   }
 
-  return (
-    <DynamicTable
-      data={data}
-      columns={columns}
-      actions={actions}
-      getRowKey={(p) => p.id}
-      onRowClick={(p) => navigate(`/page-info/${p.id}?site_id=${p.site_id}`)}
-    />
-  )
+ return (
+   <>
+     <DynamicTable data={data} columns={columns} actions={actions} getRowKey={(p) => p.id} />
+
+     <EditPageTitleDialog
+       open={editOpen}
+       onOpenChange={setEditOpen}
+       pageId={selectedPage?.id ?? null}
+       currentTitle={selectedPage?.page_title}
+     />
+   </>
+ )
+
 }

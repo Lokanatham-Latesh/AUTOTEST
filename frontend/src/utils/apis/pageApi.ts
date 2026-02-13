@@ -1,4 +1,4 @@
-import type { GetPageInfoParams, PageInfoResponse } from '@/types/pageInfo'
+import type { CreatePagePayload, GetPageInfoParams, PageInfoResponse, UpdatePageTitlePayload } from '@/types/pageInfo'
 import api from '../axios'
 
 export type Page = {
@@ -45,6 +45,17 @@ export const pageApi = {
   },
   getPageInfo: async (params: GetPageInfoParams): Promise<PageInfoResponse> => {
     const { data } = await api.get('/pages/info', { params })
+    return data
+  },
+  deletePage: async (pageId: number): Promise<void> => {
+    await api.delete(`/pages/${pageId}`)
+  },
+  createPage: async (payload: CreatePagePayload): Promise<Page> => {
+    const { data } = await api.post('/pages', payload)
+    return data
+  },
+  updatePageTitle: async (pageId: number, payload: UpdatePageTitlePayload): Promise<Page> => {
+    const { data } = await api.patch(`/pages/${pageId}/title`, payload)
     return data
   },
 }

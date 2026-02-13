@@ -28,12 +28,11 @@ type Site = {
 
 type Props = {
   data: Site[]
+  onDelete: (site: Site) => void
 }
 
-export function SiteTable({ data }: Props) {
-  const navigate = useNavigate()
-  console.log(data)
 
+export function SiteTable({ data, onDelete }: Props) {
   return (
     <div className="">
       <Table>
@@ -50,11 +49,7 @@ export function SiteTable({ data }: Props) {
 
         <TableBody>
           {data.map((site) => (
-            <TableRow
-              key={site.id}
-              className={'border-b last:border-b-0 hover:bg-gray-50 cursor-pointer'}
-              onClick={() => navigate(`/site-info/${site.id}`)}
-            >
+            <TableRow key={site.id} className={'border-b last:border-b-0 hover:bg-gray-50 '}>
               <TableCell className="text-muted-foreground">
                 {formatDateDDMMYYYY(site.created_on)}
               </TableCell>
@@ -83,7 +78,7 @@ export function SiteTable({ data }: Props) {
               </TableCell>
 
               <TableCell className="text-right">
-                <RowActions />
+                <RowActions site={site} onDelete={onDelete} />
               </TableCell>
             </TableRow>
           ))}
@@ -126,19 +121,28 @@ function AnalyzeButton({ status }: { status: Site['status'] }) {
   )
 }
 
-function RowActions() {
+function RowActions({ site, onDelete }: { site: Site; onDelete: (site: Site) => void }) {
+  const navigate = useNavigate()
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="icon" variant="ghost" className="h-8 w-8 cursor-pointer">
+        <Button size="icon" variant="ghost" className="h-8 w-8">
           <MoreVertical className="h-4 w-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem>Edit Site Title</DropdownMenuItem>
-        <DropdownMenuItem>Navigate to Site</DropdownMenuItem>
-        <DropdownMenuItem className="text-destructive">Delete Site</DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-44 ">
+        <DropdownMenuItem
+          onClick={() => navigate(`/site-info/${site.id}`)}
+          className="cursor-pointer"
+        >
+          Navigate to Site
+        </DropdownMenuItem>
+
+        <DropdownMenuItem className="text-destructive" onClick={() => onDelete(site)}>
+          Delete Site
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

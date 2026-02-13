@@ -8,6 +8,7 @@ import { useSitesQuery, useCreateSiteMutation } from '@/utils/queries/sitesQuery
 import { AddSiteSheet } from '@/components/site/AddSiteDialog'
 import type { SortType } from '@/types'
 import { useWebSocketContext } from '@/contexts/WebSocketProvider'
+import { useDeleteSiteMutation } from '@/utils/queries/sitesQuery'
 
 const Dashboard: React.FC = React.memo(() => {
   const [search, setSearch] = React.useState('')
@@ -19,6 +20,7 @@ const Dashboard: React.FC = React.memo(() => {
   const [pageSize, setPageSize] = React.useState(10)
 
   const createSiteMutation = useCreateSiteMutation()
+  const deleteSiteMutation = useDeleteSiteMutation()
   const { sendMessage, lastMessage, isConnected, connectionState } = useWebSocketContext()
 
   console.log(
@@ -55,6 +57,20 @@ const Dashboard: React.FC = React.memo(() => {
     )
   }
 
+  const handleDelete = (site: any) => {
+    if (!confirm('Are you sure you want to delete this site?')) return
+
+    deleteSiteMutation.mutate(Number(site.id), {
+      onSuccess: () => {
+        toast.success('Site deleted successfully')
+      },
+      onError: (error: any) => {
+        toast.error(error?.response?.data?.detail || 'Failed to delete site')
+      },
+    })
+  }
+
+
   return (
     <div className="flex h-full flex-col">
       <SearchBar
@@ -78,7 +94,7 @@ const Dashboard: React.FC = React.memo(() => {
         </div>
       ) : (
         <>
-          <SiteTable data={data?.data || []} />
+          <SiteTable data={data?.data || []} onDelete={handleDelete} />
           <Pagination
             currentPage={data?.meta.page ?? 1}
             totalPages={data?.meta.totalPages ?? 1}
