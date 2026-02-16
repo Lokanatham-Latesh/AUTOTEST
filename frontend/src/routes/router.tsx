@@ -210,6 +210,14 @@ export const router = createBrowserRouter([
                   title: 'Schedule',
                 },
               },
+              {
+                path: ':id/test-scenario/:tsid',
+                element: <TestScenarioDetail />,
+                handle: {
+                  sidebarId: 'test-scenario',
+                  title: 'Test Scenarios',
+                },
+              },
             ],
           },
         ],

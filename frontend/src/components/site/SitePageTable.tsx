@@ -82,15 +82,14 @@ export function SitePageTable({
         setSelectedPage(p)
         setEditOpen(true)
       },
-    }
-    ,
+    },
     {
       label: 'View Page Info',
       onClick: (p: Page) => navigate(`/page-info/${p.id}?site_id=${p.site_id}`),
     },
     {
       label: 'View Test Scenario',
-      onClick: (p: Page) => navigate(`/page-info/${p.id}`),
+      onClick: (p: Page) => navigate(`/page-info/${p.id}/test-scenario`),
     },
     {
       label: 'Delete Page',
@@ -107,17 +106,16 @@ export function SitePageTable({
     console.log('PAUSE ANALYSIS', page.id)
   }
 
- return (
-   <>
-     <DynamicTable data={data} columns={columns} actions={actions} getRowKey={(p) => p.id} />
+  return (
+    <>
+      <DynamicTable data={data} columns={columns} actions={actions} getRowKey={(p) => p.id} />
 
-     <EditPageTitleDialog
-       open={editOpen}
-       onOpenChange={setEditOpen}
-       pageId={selectedPage?.id ?? null}
-       currentTitle={selectedPage?.page_title}
-     />
-   </>
- )
-
+      <EditPageTitleDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        pageId={selectedPage?.id ?? null}
+        currentTitle={selectedPage?.page_title}
+      />
+    </>
+  )
 }

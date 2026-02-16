@@ -66,29 +66,28 @@ export function PageTable({ data, onDelete }: Props) {
     },
   ]
 
-
-const actions: TableAction<Page>[] = [
-  {
-    label: 'Edit Page Title',
-    onClick: (p: Page) => {
-      setSelectedPage(p)
-      setEditOpen(true)
+  const actions: TableAction<Page>[] = [
+    {
+      label: 'Edit Page Title',
+      onClick: (p: Page) => {
+        setSelectedPage(p)
+        setEditOpen(true)
+      },
     },
-  },
-  {
-    label: 'View Page Info',
-    onClick: (p: Page) => navigate(`/page-info/${p.id}`),
-  },
-  {
-    label: 'View Test Scenario',
-    onClick: (p: Page) => navigate(`/page-info/${p.id}`),
-  },
-  {
-    label: 'Delete Page',
-    destructive: true,
-    onClick: (p: Page) => onDelete(p.id),
-  },
-]
+    {
+      label: 'View Page Info',
+      onClick: (p: Page) => navigate(`/page-info/${p.id}`),
+    },
+    {
+      label: 'View Test Scenario',
+      onClick: (p: Page) => navigate(`/page-info/${p.id}/test-scenario`),
+    },
+    {
+      label: 'Delete Page',
+      destructive: true,
+      onClick: (p: Page) => onDelete(p.id),
+    },
+  ]
 
   function handlePlay(page: Page) {
     console.log('START ANALYSIS', page.id)

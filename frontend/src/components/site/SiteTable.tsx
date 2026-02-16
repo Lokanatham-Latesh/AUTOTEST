@@ -31,7 +31,6 @@ type Props = {
   onDelete: (site: Site) => void
 }
 
-
 export function SiteTable({ data, onDelete }: Props) {
   return (
     <div className="">
@@ -48,40 +47,49 @@ export function SiteTable({ data, onDelete }: Props) {
         </TableHeader>
 
         <TableBody>
-          {data.map((site) => (
-            <TableRow key={site.id} className={'border-b last:border-b-0 hover:bg-gray-50 '}>
-              <TableCell className="text-muted-foreground">
-                {formatDateDDMMYYYY(site.created_on)}
-              </TableCell>
-
-              <TableCell className="max-w-[200px] truncate font-medium">
-                {site.site_title}
-              </TableCell>
-
-              <TableCell>
-                <a
-                  href={site.site_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block max-w-[220px] truncate text-primary hover:underline"
-                >
-                  {site.site_url}
-                </a>
-              </TableCell>
-
-              <TableCell>
-                <StatusPill status={site.status} />
-              </TableCell>
-
-              <TableCell className="text-center">
-                <AnalyzeButton status={site.status} />
-              </TableCell>
-
-              <TableCell className="text-right">
-                <RowActions site={site} onDelete={onDelete} />
+          {data.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                No sites available
               </TableCell>
             </TableRow>
-          ))}
+          ) : (
+            data.map((site) => (
+              <TableRow key={site.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                <TableCell className="text-muted-foreground">
+                  {formatDateDDMMYYYY(site.created_on)}
+                </TableCell>
+
+                <TableCell className="max-w-[200px] truncate font-medium" title={site.site_title}>
+                  {site.site_title}
+                </TableCell>
+
+                <TableCell>
+                  <a
+                    href={site.site_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block max-w-[220px] truncate text-primary hover:underline"
+                    title={site.site_url}
+                  >
+                    {site.site_url}
+                  </a>
+                </TableCell>
+
+                <TableCell>
+                  <StatusPill status={site.status} />
+                </TableCell>
+
+                <TableCell className="text-center">
+                  <AnalyzeButton status={site.status} />
+                </TableCell>
+
+                <TableCell className="text-right">
+                  <RowActions site={site} onDelete={onDelete} />
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </div>
@@ -127,7 +135,7 @@ function RowActions({ site, onDelete }: { site: Site; onDelete: (site: Site) => 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="icon" variant="ghost" className="h-8 w-8">
+        <Button size="icon" variant="ghost" className="h-8 w-8 cursor-pointer">
           <MoreVertical className="h-4 w-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>

@@ -1,0 +1,151 @@
+from sqlalchemy.orm import Session,joinedload
+from sqlalchemy import func
+from fastapi import HTTPException, status
+
+from shared_orm.models.test_scenario import TestScenario
+from shared_orm.models.test_case import TestCase
+from shared_orm.models.page import Page
+from shared_orm.models.site import Site
+from shared_orm.models.user import User
+from app.config.logger import logger
+
+
+class ScenarioService:
+
+    def list_scenarios(
+        self,
+        db: Session,
+        page: int,
+        limit: int,
+        user: User,
+        site_id: int | None = None,
+        page_id: int | None = None,
+        search: str | None = None,
+        sort: str | None = None,
+    ):
+        logger.info(
+            f"[LIST_SCENARIOS_REQUEST] "
+            f"User={user.id} SiteID={site_id} PageID={page_id} Search={search} Sort={sort}"
+        )
+
+        query = db.query(
+            TestScenario.id,
+            TestScenario.title,
+            TestScenario.type,
+            TestScenario.category,
+            TestScenario.created_on,
+            func.count(TestCase.id).label("test_case_count")
+        ).join(
+            Page, TestScenario.page_id == Page.id
+        ).outerjoin(
+            TestCase, TestCase.test_scenario_id == TestScenario.id
+        )
+
+        # ---------------- Filter by Site ----------------
+        if site_id is not None:
+            site = db.query(Site).filter(Site.id == site_id).first()
+            if not site:
+                logger.warning(
+                    f"[LIST_SCENARIOS_FAILED] Site not found | SiteID={site_id}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Site not found"
+                )
+            query = query.filter(Page.site_id == site_id)
+
+        # ---------------- Filter by Page ----------------
+        if page_id is not None:
+            page_obj = db.query(Page).filter(Page.id == page_id).first()
+            if not page_obj:
+                logger.warning(
+                    f"[LIST_SCENARIOS_FAILED] Page not found | PageID={page_id}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Page not found"
+                )
+            query = query.filter(TestScenario.page_id == page_id)
+
+        # ---------------- Search ----------------
+        if search:
+            query = query.filter(
+                TestScenario.title.ilike(f"%{search}%")
+            )
+
+        query = query.group_by(
+            TestScenario.id,
+            TestScenario.title,
+            TestScenario.type,
+            TestScenario.category,
+            TestScenario.created_on
+        )
+
+        if sort == "created_desc":
+            query = query.order_by(TestScenario.created_on.desc())
+        elif sort == "created_asc":
+            query = query.order_by(TestScenario.created_on.asc())
+        elif sort == "title_asc":
+            query = query.order_by(TestScenario.title.asc())
+        elif sort == "title_desc":
+            query = query.order_by(TestScenario.title.desc())
+
+        else:
+            uery = query.order_by(TestScenario.created_on.desc())
+
+        total = query.count()
+
+        scenarios = (
+            query
+            .offset((page - 1) * limit)
+            .limit(limit)
+            .all()
+        )
+
+        logger.info(
+            f"[LIST_SCENARIOS_SUCCESS] "
+            f"SiteID={site_id} PageID={page_id} Total={total}"
+        )
+
+        return total, scenarios
+
+    def get_scenario_details(self, db: Session, scenario_id: int):
+        scenario = (
+            db.query(TestScenario)
+            .options(joinedload(TestScenario.test_cases))
+            .filter(TestScenario.id == scenario_id)
+            .first()
+        )
+        if not scenario:
+            logger.warning(
+                f"[GET_SCENARIO_DETAILS_FAILED] "
+                f"Scenario not found | ScenarioID={scenario_id}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Test Scenario not found"
+            )
+        logger.info(
+            f"[GET_SCENARIO_DETAILS_SUCCESS] "
+            f"ScenarioID={scenario_id} "
+            f"TestCaseCount={len(scenario.test_cases)}"
+        )
+        return {
+            "id": scenario.id,
+            "title": scenario.title,
+            "type": scenario.type,
+            "category": scenario.category,
+            "created_on": scenario.created_on,
+            "data": scenario.data,
+            "test_cases": [
+                {
+                    "id": tc.id,
+                    "title": tc.title,
+                    "type": tc.type,
+                    "is_valid": tc.is_valid,
+                    "is_valid_default": tc.is_valid_default,
+                }
+                for tc in scenario.test_cases
+            ]
+        }
+        
