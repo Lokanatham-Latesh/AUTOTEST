@@ -1,5 +1,5 @@
 """
-URL Extractor module for recursive URL discovery (Unlimited BFS)
+URL Extractor module for recursive URL discovery (Depth Controlled BFS)
 """
 
 import time
@@ -7,10 +7,11 @@ from urllib.parse import urlparse, urljoin
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from app.config.setting import settings
 
 
 class URLExtractor:
-    """Recursive URL extractor with filtering (no max limit)"""
+    """Recursive URL extractor with depth control using BFS"""
 
     BLOCKED_EXTENSIONS = {
         ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp",
@@ -33,30 +34,40 @@ class URLExtractor:
     def __init__(self, driver, logger=None):
         self.driver = driver
         self.logger = logger
+        if settings.PAGE_CRAWL_UNLIMITED:
+            self.max_depth = float("inf") 
+        else:
+            self.max_depth = settings.PAGE_CRAWL_MAX_DEPTH  
 
     # ---------------------------------------------------------
     # Public Method
     # ---------------------------------------------------------
     def extract_urls(self, base_url):
         """
-        Recursively extract all unique internal HTML URLs using BFS
+        Recursively extract internal HTML URLs using BFS
+        with max depth control from settings
         """
 
         if self.logger:
-            self.logger.info(f"Starting recursive URL extraction from: {base_url}")
+            self.logger.info(
+                f"Starting URL extraction from: {base_url} | Max Depth: {self.max_depth}"
+            )
 
         try:
             parsed_base = urlparse(base_url)
             base_domain = parsed_base.netloc
 
             visited = set()
-            to_visit = [self.normalize_url(base_url)]
+            to_visit = [(self.normalize_url(base_url), 0)]  # (url, depth)
 
             while to_visit:
 
-                current_url = to_visit.pop(0)
+                current_url, current_depth = to_visit.pop(0)
 
                 if current_url in visited:
+                    continue
+
+                if current_depth > self.max_depth:
                     continue
 
                 try:
@@ -71,7 +82,13 @@ class URLExtractor:
                     visited.add(current_url)
 
                     if self.logger:
-                        self.logger.info(f"Processing : {current_url}")
+                        self.logger.info(
+                            f"Processing: {current_url} | Depth: {current_depth}"
+                        )
+
+                    # Stop expanding children if max depth reached
+                    if current_depth == self.max_depth:
+                        continue
 
                     links = self.driver.find_elements(By.TAG_NAME, "a")
 
@@ -85,28 +102,34 @@ class URLExtractor:
 
                         parsed_url = urlparse(normalized_url)
 
+                        # Only internal domain
                         if parsed_url.netloc != base_domain:
                             continue
 
                         if self.is_extension_url(normalized_url):
-                            if self.logger:
-                                self.logger.debug(f"Skipping extension URL: {normalized_url}")
                             continue
 
                         if self.is_blocked_path(normalized_url):
-                            if self.logger:
-                                self.logger.debug(f"Skipping blocked path: {normalized_url}")
                             continue
 
-                        if normalized_url not in visited and normalized_url not in to_visit:
-                            to_visit.append(normalized_url)
+                        if (
+                            normalized_url not in visited
+                            and all(normalized_url != url for url, _ in to_visit)
+                        ):
+                            to_visit.append(
+                                (normalized_url, current_depth + 1)
+                            )
 
                 except Exception as e:
                     if self.logger:
-                        self.logger.error(f"Failed to process {current_url}: {str(e)}")
+                        self.logger.error(
+                            f"Failed to process {current_url}: {str(e)}"
+                        )
 
             if self.logger:
-                self.logger.info(f"Total unique HTML URLs found: {len(visited)}")
+                self.logger.info(
+                    f"Total unique HTML URLs found: {len(visited)}"
+                )
 
             return sorted(visited)
 
