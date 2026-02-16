@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     LLM_QUEUE: str
     PAGE_CRAWL_MAX_DEPTH: int = 2
+    PAGE_CRAWL_UNLIMITED: bool = False
 
 
     model_config = SettingsConfigDict(
