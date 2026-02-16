@@ -1,69 +1,71 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DynamicTable } from '@/components/table/DynamicTable'
 import type { TableColumn, TableAction } from '@/components/table/types'
-import type { TestCase } from '@/types/testCase'
-import { ExecuteButton } from '../testcase/ExecuteButton'
+import type { Scenario } from '@/types/scenario'
 
 type Props = {
-  data: TestCase[]
-  onEdit: (scenario: TestCase) => void
-  siteId: string
+  data: Scenario[]
+  parentId: string
+  isSiteRoute: boolean
 }
 
-export function TestScenarioTable({ data, onEdit, siteId }: Props) {
+export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
   const navigate = useNavigate()
-  const [rows, setRows] = useState(data)
 
-  const columns: TableColumn<TestCase>[] = [
+  const columns: TableColumn<Scenario>[] = [
     {
       key: 'title',
       header: 'Title',
-      render: (row) => <span className="font-medium">{row.title}</span>,
-    },
-    { key: 'type', header: 'Type', render: (row) => row.type },
-    { key: 'category', header: 'Category', render: (row) => row.category },
-    { key: 'count', header: 'Test Cases', align: 'center', render: (row) => row.testCasesCount },
-    {
-      key: 'execute',
-      header: 'Execute',
-      align: 'center',
+      width: 'w-[30%]',
       render: (row) => (
-        <ExecuteButton status={row.status} onExecute={() => handleExecute(row.id)} />
+        <div
+          className="truncate max-w-[250px]"
+          title={row.title} // Tooltip
+        >
+          {row.title}
+        </div>
       ),
     },
+    {
+      key: 'type',
+      header: 'Type',
+      width: 'w-[15%]',
+      render: (row) => row.type,
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      width: 'w-[20%]',
+      render: (row) => row.category,
+    },
+    {
+      key: 'count',
+      header: 'Test Cases',
+      width: 'w-[15%]',
+      align: 'center',
+      render: (row) => row.test_case_count,
+    },
   ]
 
-  const actions: TableAction<TestCase>[] = [
+
+  const actions: TableAction<Scenario>[] = [
     {
       label: 'View Details',
-      onClick: (row) => navigate(`/site-info/${siteId}/test-scenario/${row.id}`),
-    },
-    { label: 'Edit', onClick: onEdit },
-    {
-      label: 'Delete',
-      destructive: true,
-      onClick: (row) => setRows((prev) => prev.filter((r) => r.id !== row.id)),
+      onClick: (row) =>
+        navigate(
+          isSiteRoute
+            ? `/site-info/${parentId}/test-scenario/${row.id}`
+            : `/page-info/${parentId}/test-scenario/${row.id}`,
+        ),
     },
   ]
 
-  function handleExecute(id: string) {
-    setRows((prev) => prev.map((row) => (row.id === id ? { ...row, status: 'Running' } : row)))
-
-    setTimeout(() => {
-      setRows((prev) => prev.map((row) => (row.id === id ? { ...row, status: 'Done' } : row)))
-    }, 3000)
-  }
-  const handleRowClick = (row: TestCase) => {
-    navigate(`/site-info/${siteId}/test-scenario/${row.id}`)
-  }
   return (
     <DynamicTable
-      data={rows}
+      data={data}
       columns={columns}
       actions={actions}
       getRowKey={(row) => row.id}
-      onRowClick={(row) => handleRowClick(row)}
     />
   )
 }

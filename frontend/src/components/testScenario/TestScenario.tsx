@@ -1,58 +1,34 @@
 import { useState } from 'react'
-import { testScenarioDummyData } from '@/mock/testScenarioDummy'
+import { useParams, useLocation } from 'react-router-dom'
+import { useScenariosQuery } from '@/utils/queries/scenarioQueries'
 import { TestScenarioTable } from './TestScenarioTable'
 import { SearchBar } from '../common/SearchBar'
 import { Button } from '../ui/button'
 import { Pagination } from '../common/Pagination'
 import type { SortType } from '@/types'
-import type { TestCase, TestScenarioForm } from '@/types/testCase'
 import { TestScenarioSheetForm } from './TestScenarioSheetForm'
-import { useParams } from 'react-router-dom'
 
 const TestScenario = () => {
-  const { id: currentSiteId } = useParams<{ id: string }>()
+  const { id } = useParams<{ id: string }>()
+  const location = useLocation()
+
+  const isSiteRoute = location.pathname.includes('site-info')
+  const isPageRoute = location.pathname.includes('page-info')
+
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortType>('created_desc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [openAdd, setOpenAdd] = useState(false)
-  const [editScenario, setEditScenario] = useState<TestCase | null>(null)
 
-  const [scenarios, setScenarios] = useState<TestCase[]>(testScenarioDummyData)
-
-  const handleAddOrEdit = (values: TestScenarioForm, id?: string) => {
-    if (id) {
-      // Edit
-      setScenarios((prev) =>
-        prev.map((item) =>
-          item.id === id ? { ...item, ...values, testCasesCount: values.steps.length } : item,
-        ),
-      )
-    } else {
-      // Add new
-      const newScenario: TestCase = {
-        id: String(Date.now()),
-        title: values.title,
-        type: values.type,
-        category: values.category,
-        description: values.description,
-        testCasesCount: values.steps.length,
-        status: 'Idle',
-        steps: values.steps,
-      }
-      setScenarios((prev) => [newScenario, ...prev])
-    }
-
-    setOpenAdd(false)
-    setEditScenario(null)
-  }
-
-  const handleEdit = (scenario: TestCase) => {
-    setEditScenario(scenario)
-    setOpenAdd(true)
-  }
-
-  const isLoading = false
+  const { data, isLoading } = useScenariosQuery({
+    page,
+    limit: pageSize,
+    site_id: isSiteRoute ? Number(id) : undefined,
+    page_id: isPageRoute ? Number(id) : undefined,
+    search,
+    sort,
+  })
 
   return (
     <div>
@@ -72,22 +48,7 @@ const TestScenario = () => {
           Add Test Scenario
         </Button>
 
-        <TestScenarioSheetForm
-          open={openAdd}
-          onOpenChange={(open) => {
-            setOpenAdd(open)
-            if (!open) setEditScenario(null)
-          }}
-          onSubmit={handleAddOrEdit}
-          initialData={
-            editScenario
-              ? {
-                  ...editScenario,
-                  steps: editScenario.steps ?? [{ value: '' }],
-                }
-              : undefined
-          }
-        />
+        <TestScenarioSheetForm open={openAdd} onOpenChange={setOpenAdd} />
       </SearchBar>
 
       {isLoading ? (
@@ -96,13 +57,13 @@ const TestScenario = () => {
         </div>
       ) : (
         <>
-          <TestScenarioTable data={scenarios} onEdit={handleEdit} siteId={currentSiteId!} />
+          <TestScenarioTable data={data?.data ?? []} parentId={id!} isSiteRoute={isSiteRoute} />
 
           <Pagination
             currentPage={page}
-            totalPages={Math.ceil(scenarios.length / pageSize)}
+            totalPages={data?.meta.totalPages ?? 1}
             itemsPerPage={pageSize}
-            totalItems={scenarios.length}
+            totalItems={data?.meta.totalItems ?? 0}
             onPageChange={setPage}
             onItemsPerPageChange={(size) => {
               setPageSize(size)

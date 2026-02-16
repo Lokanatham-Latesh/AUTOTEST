@@ -19,11 +19,11 @@ import type { TestScenarioForm } from '@/types/testCase'
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (data: TestScenarioForm, id?: string) => void
+  onSubmit ?: (data: TestScenarioForm, id?: string) => void
   initialData?: TestScenarioForm & { id: string }
 }
 
-export function TestScenarioSheetForm({ open, onOpenChange, onSubmit, initialData }: Props) {
+export function TestScenarioSheetForm({ open, onOpenChange,  initialData }: Props) {
   const {
     control,
     register,
@@ -61,8 +61,8 @@ export function TestScenarioSheetForm({ open, onOpenChange, onSubmit, initialDat
     }
   }, [open, initialData, reset])
 
-  const submitHandler = (data: TestScenarioForm) => {
-    onSubmit(data, initialData?.id)
+  const submitHandler = () => {
+    // onSubmit(data, initialData?.id)
     reset()
     onOpenChange(false)
   }

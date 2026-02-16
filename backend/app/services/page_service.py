@@ -163,13 +163,13 @@ class PageService:
                     detail="Page does not belong to the given site"
                 )
                 
-        else:
-            if page.site_id is not None:
-                logger.warning(f"[GET_PAGE_INFO_FAILED] Page already linked | PageID={page_id}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="This page is already linked to a site and is not a normal page"
-                )
+        # else:
+        #     if page.site_id is not None:
+        #         logger.warning(f"[GET_PAGE_INFO_FAILED] Page already linked | PageID={page_id}")
+        #         raise HTTPException(
+        #             status_code=status.HTTP_400_BAD_REQUEST,
+        #             detail="This page is already linked to a site and is not a normal page"
+        #         )
 
         test_scenario_count = db.query(func.count(TestScenario.id)) \
             .filter(TestScenario.page_id == page.id) \

@@ -53,35 +53,43 @@ export function DynamicTable<T>({
       </TableHeader>
 
       <TableBody>
-        {data.map((row) => (
-          <TableRow
-            key={getRowKey(row)}
-            className={cn(
-              'border-b last:border-b-0',
-              onRowClick && 'hover:bg-gray-50 cursor-pointer',
-            )}
-            onClick={() => onRowClick?.(row)}
-          >
-            {columns.map((col) => (
-              <TableCell
-                key={col.key}
-                className={cn(
-                  col.align === 'center' && 'text-center',
-                  col.align === 'right' && 'text-right',
-                  'max-w-[220px] truncate',
-                )}
-              >
-                {col.render(row)}
-              </TableCell>
-            ))}
-
-            {actions && (
-              <TableCell className="text-right">
-                <RowActions row={row} actions={actions} />
-              </TableCell>
-            )}
+        {data.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={columns.length + (actions ? 1 : 0)} className="text-center py-6">
+              No data found
+            </TableCell>
           </TableRow>
-        ))}
+        ) : (
+          data.map((row) => (
+            <TableRow
+              key={getRowKey(row)}
+              className={cn(
+                'border-b last:border-b-0',
+                onRowClick && 'hover:bg-gray-50 cursor-pointer',
+              )}
+              onClick={() => onRowClick?.(row)}
+            >
+              {columns.map((col) => (
+                <TableCell
+                  key={col.key}
+                  className={cn(
+                    col.align === 'center' && 'text-center',
+                    col.align === 'right' && 'text-right',
+                    'max-w-[220px] truncate',
+                  )}
+                >
+                  {col.render(row)}
+                </TableCell>
+              ))}
+
+              {actions && (
+                <TableCell className="text-right">
+                  <RowActions row={row} actions={actions} />
+                </TableCell>
+              )}
+            </TableRow>
+          ))
+        )}
       </TableBody>
     </Table>
   )
@@ -91,7 +99,7 @@ function RowActions<T>({ row, actions }: { row: T; actions: TableAction<T>[] }) 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="icon" variant="ghost" className="h-8 w-8">
+        <Button size="icon" variant="ghost" className="h-8 w-8 cursor-pointer">
           <MoreVertical className="h-4 w-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
