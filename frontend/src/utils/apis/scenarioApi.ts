@@ -1,4 +1,4 @@
-import type { GetScenariosParams, GetScenariosResponse, ScenarioDetailResponse } from '@/types/scenario'
+import type { GetScenariosParams, GetScenariosResponse, ScenarioDetailResponse, ScenarioUpdateResponse, UpdateScenarioPayload } from '@/types/scenario'
 import api from '../axios'
 
 export const scenarioApi = {
@@ -15,12 +15,21 @@ export const scenarioApi = {
       },
     }
   },
-    getScenarioDetails: async (
-    scenarioId: number
-  ): Promise<ScenarioDetailResponse> => {
+  getScenarioDetails: async (scenarioId: number): Promise<ScenarioDetailResponse> => {
     const { data } = await api.get(`/scenarios/${scenarioId}`)
 
     return data
+  },
+  updateScenario: async (
+    scenarioId: number,
+    payload: UpdateScenarioPayload,
+  ): Promise<ScenarioUpdateResponse> => {
+    const { data } = await api.patch(`/scenarios/${scenarioId}`, payload)
+    return data
+  },
+
+  deleteScenario: async (scenarioId: number): Promise<void> => {
+    await api.delete(`/scenarios/${scenarioId}`)
   },
 }
 

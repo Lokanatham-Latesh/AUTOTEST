@@ -198,7 +198,6 @@ class PageService:
     def delete_page(self, page_id: int, db: Session, user: User):
         logger.info(f"[DELETE_PAGE_REQUEST] User={user.id} PageID={page_id}")
 
-        
         page = db.query(Page).filter(Page.id == page_id).first()
         if not page:
             logger.warning(f"[DELETE_PAGE_FAILED] Page not found | PageID={page_id}")
