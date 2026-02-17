@@ -1,11 +1,10 @@
 import { useForm, useFieldArray } from 'react-hook-form'
 import { X, Plus } from 'lucide-react'
 import { useEffect } from 'react'
-
+import { toast } from 'sonner'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -14,70 +13,114 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { TestScenarioForm } from '@/types/testCase'
+
+import { useUpdateScenarioMutation } from '@/utils/queries/scenarioQueries'
 
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit ?: (data: TestScenarioForm, id?: string) => void
-  initialData?: TestScenarioForm & { id: string }
+  initialData?: any
 }
 
-export function TestScenarioSheetForm({ open, onOpenChange,  initialData }: Props) {
-  const {
+type FormValues = {
+  title: string
+  type: 'auto-generated' | 'manual'
+  category:
+    | 'functional'
+    | 'auth-positive'
+    | 'auth-negative'
+    | 'ui-validation'
+    | 'validation'
+    | 'navigation'
+    | 'form'
+  steps: { value: string }[]
+}
+
+export function TestScenarioSheetForm({ open, onOpenChange, initialData }: Props) {
+  const updateMutation = useUpdateScenarioMutation()
+
+  const { control, register, handleSubmit, reset, setValue, watch, getValues } =
+    useForm<FormValues>({
+      defaultValues: {
+        title: '',
+        type: 'auto-generated',
+        category: 'functional',
+        steps: [{ value: '' }],
+      },
+    })
+
+  const { fields, append, remove } = useFieldArray({
     control,
-    register,
-    handleSubmit,
-    reset,
-    setValue,
-    formState: { errors },
-  } = useForm<TestScenarioForm>({
-    defaultValues: initialData
-      ? { ...initialData }
-      : {
-          title: '',
-          type: 'auto',
-          category: 'functional',
-          description: '',
-          steps: [{ value: '' }],
-        },
+    name: 'steps',
   })
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'steps' })
-
+  // Populate form when editing
   useEffect(() => {
-    if (open) {
-      reset(
-        initialData
-          ? { ...initialData }
-          : {
-              title: '',
-              type: 'auto',
-              category: 'functional',
-              description: '',
-              steps: [{ value: '' }],
-            },
-      )
+    if (open && initialData) {
+      reset({
+        title: initialData.title,
+        type: initialData.type,
+        category: initialData.category,
+        steps: initialData.data?.steps?.map((step: any) => ({
+          value: `${step.action} - ${step.target}`,
+        })) || [{ value: '' }],
+      })
     }
   }, [open, initialData, reset])
 
-  const submitHandler = () => {
-    // onSubmit(data, initialData?.id)
-    reset()
-    onOpenChange(false)
+  // Prevent adding empty step
+  const handleAddStep = () => {
+    const steps = getValues('steps')
+    const lastStep = steps[steps.length - 1]
+
+    if (!lastStep?.value.trim()) {
+      toast.error('Please fill the current step before adding another.')
+      return
+    }
+
+    append({ value: '' })
+  }
+
+  const submitHandler = (formData: FormValues) => {
+    const formattedSteps = formData.steps.map((step) => {
+      const [action, target] = step.value.split(' - ')
+      return { action, target }
+    })
+
+    const fullData = {
+      ...initialData.data,
+      steps: formattedSteps,
+      title: formData.title,
+      category: formData.category,
+    }
+
+    updateMutation.mutate(
+      {
+        scenarioId: initialData.id,
+        payload: {
+          title: formData.title,
+          type: formData.type,
+          category: formData.category,
+          data: fullData,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success('Scenario updated successfully')
+          onOpenChange(false)
+        },
+        onError: () => {
+          toast.error('Failed to update scenario')
+        },
+      },
+    )
   }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex h-full w-[520px] flex-col p-0">
-        <SheetHeader className="relative border-b px-6 py-4">
-          <SheetTitle>{initialData ? 'Edit Test Scenario' : 'Add Test Scenario'}</SheetTitle>
-          <button
-            onClick={() => onOpenChange(false)}
-            className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+        <SheetHeader className="border-b px-6 py-4">
+          <SheetTitle>Edit Test Scenario</SheetTitle>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(submitHandler)} className="flex h-full flex-col">
@@ -85,25 +128,21 @@ export function TestScenarioSheetForm({ open, onOpenChange,  initialData }: Prop
             {/* Title */}
             <div className="space-y-2">
               <Label>Title</Label>
-              <Input
-                placeholder="Enter title"
-                {...register('title', { required: 'Title is required' })}
-              />
-              {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
+              <Input placeholder="Enter title" {...register('title', { required: true })} />
             </div>
 
             {/* Scenario Type */}
             <div className="space-y-2">
               <Label>Scenario Type</Label>
               <Select
-                value={initialData?.type || 'auto'}
-                onValueChange={(value) => setValue('type', value as 'auto' | 'manual')}
+                value={watch('type')}
+                onValueChange={(value) => setValue('type', value as 'auto-generated' | 'manual')}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="--Select Option--" />
+                  <SelectValue placeholder="Select Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="auto">Auto-generated</SelectItem>
+                  <SelectItem value="auto-generated">Auto-generated</SelectItem>
                   <SelectItem value="manual">Manual</SelectItem>
                 </SelectContent>
               </Select>
@@ -113,51 +152,50 @@ export function TestScenarioSheetForm({ open, onOpenChange,  initialData }: Prop
             <div className="space-y-2">
               <Label>Scenario Category</Label>
               <Select
-                value={initialData?.category || 'functional'}
+                value={watch('category')}
                 onValueChange={(value) =>
                   setValue(
                     'category',
-                    value as 'functional' | 'regression' | 'smoke' | 'performance',
+                    value as
+                      | 'functional'
+                      | 'auth-positive'
+                      | 'auth-negative'
+                      | 'ui-validation'
+                      | 'validation'
+                      | 'navigation'
+                      | 'form',
                   )
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="--Select Option--" />
+                  <SelectValue placeholder="Select Category" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="functional">Functional</SelectItem>
-                  <SelectItem value="regression">Regression</SelectItem>
-                  <SelectItem value="smoke">Smoke</SelectItem>
-                  <SelectItem value="performance">Performance</SelectItem>
+                  <SelectItem value="auth-positive">Auth Positive</SelectItem>
+                  <SelectItem value="auth-negative">Auth Negative</SelectItem>
+                  <SelectItem value="ui-validation">UI Validation</SelectItem>
+                  <SelectItem value="validation">Validation</SelectItem>
+                  <SelectItem value="navigation">Navigation</SelectItem>
+                  <SelectItem value="form">Form</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Description */}
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea placeholder="Enter description" rows={4} {...register('description')} />
-            </div>
-
             {/* Steps */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Step to Execute</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-600 hover:text-red-700"
-                  onClick={() => append({ value: '' })}
-                >
+              <div className="flex justify-between items-center">
+                <Label>Steps</Label>
+                <Button type="button" variant="ghost" size="sm" onClick={handleAddStep}>
                   <Plus className="mr-1 h-4 w-4" /> Add Step
                 </Button>
               </div>
+
               {fields.map((field, index) => (
                 <div key={field.id} className="flex gap-2">
                   <Input
-                    placeholder={`Enter step ${index + 1} here`}
-                    {...register(`steps.${index}.value`, { required: 'Step is required' })}
+                    placeholder="action - target"
+                    {...register(`steps.${index}.value`, { required: true })}
                   />
                   <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
                     <X className="h-4 w-4" />
@@ -167,16 +205,14 @@ export function TestScenarioSheetForm({ open, onOpenChange,  initialData }: Prop
             </div>
           </div>
 
-          {/* Footer */}
           <SheetFooter className="border-t px-6 py-4">
-            <div className="flex w-full justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="bg-red-600 hover:bg-red-700">
-                {initialData ? 'Update' : 'Add'}
-              </Button>
-            </div>
+            <Button
+              type="submit"
+              className="bg-red-600 hover:bg-red-700"
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save'}
+            </Button>
           </SheetFooter>
         </form>
       </SheetContent>

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session,joinedload
 from sqlalchemy import func
 from fastapi import HTTPException, status
-
+from datetime import datetime
 from shared_orm.models.test_scenario import TestScenario
 from shared_orm.models.test_case import TestCase
 from shared_orm.models.page import Page
@@ -23,6 +23,11 @@ class ScenarioService:
         search: str | None = None,
         sort: str | None = None,
     ):
+        """
+    Retrieve paginated list of test scenarios with optional
+    filtering (site, page, search) and sorting.
+    Returns total count and scenario list.
+    """
         logger.info(
             f"[LIST_SCENARIOS_REQUEST] "
             f"User={user.id} SiteID={site_id} PageID={page_id} Search={search} Sort={sort}"
@@ -91,7 +96,7 @@ class ScenarioService:
             query = query.order_by(TestScenario.title.desc())
 
         else:
-            uery = query.order_by(TestScenario.created_on.desc())
+            query = query.order_by(TestScenario.created_on.desc())
 
         total = query.count()
 
@@ -110,6 +115,11 @@ class ScenarioService:
         return total, scenarios
 
     def get_scenario_details(self, db: Session, scenario_id: int):
+        """
+    Fetch detailed information of a test scenario
+    including its associated test cases.
+    Raises 404 if not found.
+    """
         scenario = (
             db.query(TestScenario)
             .options(joinedload(TestScenario.test_cases))
@@ -148,4 +158,90 @@ class ScenarioService:
                 for tc in scenario.test_cases
             ]
         }
+    
+    def delete_scenario(self, db: Session, scenario_id: int):
+        """
+    Permanently delete a test scenario and its
+    associated test cases.
+    Raises 404 if not found.
+    """
+        logger.info(f"[DELETE_SCENARIO_REQUEST] ScenarioID={scenario_id}")
+        scenario = db.query(TestScenario).filter(
+        TestScenario.id == scenario_id
+    ).first()
+        if not scenario:
+            logger.warning(
+            f"[DELETE_SCENARIO_FAILED] Scenario not found | ScenarioID={scenario_id}"
+        )
+            raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test Scenario not found"
+        )
+        db.query(TestCase).filter(
+        TestCase.test_scenario_id == scenario_id).delete()
+        db.delete(scenario)
+        db.commit()
+        logger.info(f"[DELETE_SCENARIO_SUCCESS] ScenarioID={scenario_id}")
+
+    def update_scenario(
+        self,
+        db: Session,
+        scenario_id: int,
+        payload: dict,
+        user: User
+    ):
+        """
+    Partially update allowed fields (title, category,
+    type, data) of a test scenario and update audit fields.
+    Raises 404 if not found.
+    """
+        logger.info(
+            f"[UPDATE_SCENARIO_REQUEST] "
+            f"ScenarioID={scenario_id} UpdatedBy={user.id}"
+        )
+
+        scenario = db.query(TestScenario).filter(
+            TestScenario.id == scenario_id
+        ).first()
+
+        if not scenario:
+            logger.warning(
+                f"[UPDATE_SCENARIO_FAILED] "
+                f"Scenario not found | ScenarioID={scenario_id}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Test Scenario not found"
+            )
+         # --------- Allowed Fields Only ---------
+        allowed_fields = {"title", "category", "type", "data"}
+        for field in allowed_fields:
+            if field in payload:
+                setattr(scenario, field, payload[field])
+
+        scenario.updated_on = datetime.utcnow()
+        scenario.updated_by = user.id
+        db.commit()
+        db.refresh(scenario)
+        logger.info(
+            f"[UPDATE_SCENARIO_SUCCESS] "
+            f"ScenarioID={scenario_id} UpdatedBy={user.id}"
+        )
+        return {
+            "id": scenario.id,
+            "title": scenario.title,
+            "type": scenario.type,
+            "category": scenario.category,
+            "data": scenario.data,
+            "updated_on": scenario.updated_on,
+            "updated_by": scenario.updated_by,
+        }
+    
+
+
+        
+        
+            
+    
+    
         

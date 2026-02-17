@@ -22,3 +22,14 @@ export type RouteHandle = {
 
 export type AnalyzeStatus = 'New' | 'Processing' | 'Done' | 'Pause'
 
+export interface ConfirmModalProps {
+  open: boolean
+  title?: string
+  message: string
+  confirmText?: string
+  cancelText?: string
+  isLoading?: boolean
+  variant?: 'default' | 'danger'
+  onConfirm: () => void
+  onCancel: () => void
+}

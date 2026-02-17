@@ -9,10 +9,11 @@ from app.routers.site import router as site_router
 from app.routers.pages import router as pages_router
 from app.routers.websocket import router as websocket_router
 from app.routers.setting import router as setting_router
-from app.routers.scenario import router as scenario_router
+from app.routers.test_scenario import router as test_scenario_router
 from app.routers.provider import router as provider_router
 from app.routers.provider_model import router as provider_model_router
 from app.routers.function import router as function_router
+from app.routers.test_case import router as test_case_router
 from app.db.session import get_db
 from app.config.rabbitmq import rabbitmq_connection
 from app.config.logger import logger
@@ -88,7 +89,8 @@ def create_app() -> FastAPI:
     app.include_router(provider_router, prefix="/api/v1")
     app.include_router(provider_model_router, prefix="/api/v1")
     app.include_router(function_router, prefix="/api/v1")
-    app.include_router(scenario_router,prefix ="/api/v1")
+    app.include_router(test_scenario_router,prefix ="/api/v1")
+    app.include_router(test_case_router, prefix="/api/v1")
 
     return app
 

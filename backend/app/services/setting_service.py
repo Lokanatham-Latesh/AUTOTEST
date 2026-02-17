@@ -5,7 +5,6 @@ from datetime import datetime
 from shared_orm.models.setting_category import SettingCategory
 from shared_orm.models.setting import Setting
 from sqlalchemy import func
-
 from shared_orm.models.test_case import TestCase
 from shared_orm.models.test_scenario import TestScenario
 from app.schemas.setting_schema import SettingResponse
