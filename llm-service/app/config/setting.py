@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     TEST_SCENARIO_QUEUE: str
     TEST_CASE_QUEUE:str
 
+    PAGE_EXTRACT_SINGLE_QUEUE = "page_extract_single_queue"
 
     LLM_QUEUE: str
     PAGE_CRAWL_MAX_DEPTH: int = 2

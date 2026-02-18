@@ -171,6 +171,17 @@ generate_tests:
     If UI validation indicators exist:
     - Generate UI validation tests.
 
+    For every test case you generate:
+    - Set is_valid to true if the test case is well-formed and fully executable
+      based on the available selectors and page structure.
+    - Set is_valid to false if the test case cannot be executed — for example,
+      a required selector is missing, a step cannot be completed on this page,
+      or the element does not exist in the provided HTML.
+    - Set is_valid_default to true for exactly ONE test case per scenario —
+      the most representative test case that best captures the core intent of
+      the scenario. This is typically the primary happy path or the most
+      critical flow. All other test cases must have is_valid_default set to false.
+
     Always return valid JSON only.
 
   user: |
@@ -214,6 +225,9 @@ generate_tests:
           "type": "functional | auth-positive | auth-negative | navigation | ui-validation | validation",
 
           "test_case_type": "auto-generated",
+
+          "is_valid": true,
+          "is_valid_default": false,
 
           "steps": [
             "Step 1 description",
@@ -262,7 +276,16 @@ generate_tests:
        - Use "contains" for partial match
     9. Do NOT return empty test_cases array unless absolutely no testable elements exist.
     10. Ensure JSON is syntactically valid.
-
+    11. For is_valid:
+        - Set to true if the test case is fully executable with the available
+          selectors and page structure.
+        - Set to false if any required selector is missing, a step cannot be
+          completed on this page, or the element does not exist in the HTML.
+    12. For is_valid_default:
+        - Exactly ONE test case per scenario must have is_valid_default set to true.
+        - Choose the test case that best represents the core intent of the scenario
+          (typically the primary success flow or happy path).
+        - All other test cases must have is_valid_default set to false.
 
 generate_script:
   selenium:
