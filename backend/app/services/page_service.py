@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, asc, desc
@@ -35,7 +35,7 @@ class PageService:
         page_url=page_url.strip(),
         site_id=None,                
         status="new",
-        created_on=datetime.utcnow(),
+        created_on=datetime.now(timezone.utc),
         created_by=user.id,
         updated_on=None,
         updated_by=None,
@@ -198,7 +198,6 @@ class PageService:
     def delete_page(self, page_id: int, db: Session, user: User):
         logger.info(f"[DELETE_PAGE_REQUEST] User={user.id} PageID={page_id}")
 
-        
         page = db.query(Page).filter(Page.id == page_id).first()
         if not page:
             logger.warning(f"[DELETE_PAGE_FAILED] Page not found | PageID={page_id}")
@@ -243,7 +242,7 @@ class PageService:
             )
         old_title = page.page_title
         page.page_title = new_title.strip()
-        page.updated_on = datetime.utcnow()
+        page.updated_on = datetime.now(timezone.utc)
         page.updated_by= user.id
         db.commit()
         db.refresh(page)

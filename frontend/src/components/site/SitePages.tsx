@@ -1,19 +1,25 @@
 import { useState } from 'react'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Pagination } from '@/components/common/Pagination'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 import type { SortType } from '@/types'
 import { SitePageTable } from './SitePageTable'
 import { useSitePagesQuery } from '@/utils/queries/sitesQuery'
 import { useParams } from 'react-router-dom'
 import { useDeletePageMutation } from '@/utils/queries/pageQueries'
 import { toast } from 'sonner'
+
 const SitePages = () => {
   const { id } = useParams<{ id: string }>()
   const siteId = Number(id)
+
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortType>('created_desc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [selectedPageId, setSelectedPageId] = useState<number | null>(null)
 
   const { data, isLoading, isError } = useSitePagesQuery({
     siteId,
@@ -22,14 +28,22 @@ const SitePages = () => {
     search,
     sort,
   })
+
   const deletePageMutation = useDeletePageMutation()
 
-  const handleDeletePage = (pageId: number) => {
-    if (!confirm('Are you sure you want to delete this page?')) return
+  const handleDeleteClick = (pageId: number) => {
+    setSelectedPageId(pageId)
+    setDeleteModalOpen(true)
+  }
 
-    deletePageMutation.mutate(pageId, {
+  const handleConfirmDelete = () => {
+    if (!selectedPageId) return
+
+    deletePageMutation.mutate(selectedPageId, {
       onSuccess: () => {
         toast.success('Page deleted successfully')
+        setDeleteModalOpen(false)
+        setSelectedPageId(null)
       },
       onError: (error: any) => {
         toast.error(error?.response?.data?.detail || 'Failed to delete page')
@@ -39,7 +53,6 @@ const SitePages = () => {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Search + Sort */}
       <SearchBar
         searchQuery={search}
         onSearchChange={(value) => {
@@ -53,7 +66,6 @@ const SitePages = () => {
         }}
       />
 
-      {/* Loading state */}
       {isLoading && (
         <div className="flex items-center justify-center h-full">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
@@ -66,10 +78,9 @@ const SitePages = () => {
         </div>
       )}
 
-      {/* Data */}
       {!isLoading && !isError && (
         <>
-          <SitePageTable data={data?.data ?? []} onDelete={handleDeletePage} />
+          <SitePageTable data={data?.data ?? []} onDelete={handleDeleteClick} />
 
           <Pagination
             currentPage={page}
@@ -84,6 +95,20 @@ const SitePages = () => {
           />
         </>
       )}
+
+      <ConfirmModal
+        open={deleteModalOpen}
+        title="Confirm Deletion"
+        message="Are you sure you want to delete this page?"
+        confirmText="Delete"
+        variant="danger"
+        isLoading={deletePageMutation.isPending}
+        onCancel={() => {
+          setDeleteModalOpen(false)
+          setSelectedPageId(null)
+        }}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   )
 }

@@ -1,10 +1,15 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { DynamicTable } from '../table/DynamicTable'
 import type { TableAction, TableColumn } from '../table/types'
 import { useScenarioDetails } from '@/utils/queries/scenarioQueries'
+import { useDeleteTestCaseMutation } from '@/utils/queries/testCaseQueries'
 import { formatDateDDMMYYYY } from '@/utils/helper'
+import { TestScenarioSheetForm } from './TestScenarioSheetForm'
+import { TestCaseSheetForm } from '../testcase/TestCaseSheetForm'
+import { ConfirmModal } from '../common/ConfirmModal'
+import { toast } from 'sonner'
 
 interface TestCase {
   id: number
@@ -18,20 +23,38 @@ const TestScenarioDetail: React.FC = () => {
   const { tsid } = useParams<{ tsid: string }>()
 
   const { data, isLoading } = useScenarioDetails(Number(tsid))
+  const deleteTestCaseMutation = useDeleteTestCaseMutation()
 
-  if (isLoading) {
-    return <div className="p-6">Loading...</div>
-  }
+  const [openScenarioEdit, setOpenScenarioEdit] = useState(false)
 
-  if (!data) {
-    return <div className="p-6">No data found</div>
-  }
+  const [openDeleteModal, setOpenDeleteModal] = useState(false)
+  const [selectedTestCaseId, setSelectedTestCaseId] = useState<number | null>(null)
+
+  const [openTestCaseModal, setOpenTestCaseModal] = useState(false)
+  const [editTestCaseId, setEditTestCaseId] = useState<number | null>(null)
+
+  if (isLoading) return <div className="p-6">Loading...</div>
+  if (!data) return <div className="p-6">No data found</div>
 
   const scenarioData = data.data || {}
   const steps = scenarioData.steps || []
   const flowStructure = scenarioData.flow_structure || null
 
-  // Table columns
+  const handleConfirmDelete = () => {
+    if (!selectedTestCaseId) return
+
+    deleteTestCaseMutation.mutate(selectedTestCaseId, {
+      onSuccess: () => {
+        toast.success('Test case deleted successfully')
+        setOpenDeleteModal(false)
+        setSelectedTestCaseId(null)
+      },
+      onError: () => {
+        toast.error('Failed to delete test case')
+      },
+    })
+  }
+
   const testCaseColumns: TableColumn<TestCase>[] = [
     { key: 'title', header: 'Title', render: (row) => row.title },
     { key: 'type', header: 'Type', render: (row) => row.type },
@@ -48,22 +71,31 @@ const TestScenarioDetail: React.FC = () => {
   ]
 
   const testCaseActions: TableAction<TestCase>[] = [
-    { label: 'Edit Test Case', onClick: (row) => alert('Edit ' + row.title) },
+    {
+      label: 'Edit Test Case',
+      onClick: (row) => {
+        setEditTestCaseId(row.id)
+        setOpenTestCaseModal(true)
+      },
+    },
     {
       label: 'Delete Test Case',
-      onClick: (row) => alert('Delete ' + row.title),
       destructive: true,
+      onClick: (row) => {
+        setSelectedTestCaseId(row.id)
+        setOpenDeleteModal(true)
+      },
     },
   ]
 
   return (
     <div>
       {/* SCENARIO DETAILS */}
-      <div className="border border-[#E4D7D7] bg-white rounded-[6px] overflow-hidden">
-        <div className="bg-[#FFF8F8] border-b border-[#E4D7D7] py-3 px-4 flex justify-between items-center">
-          <h2 className="text-[15px] font-semibold text-[#322525]">Test Scenario Details</h2>
+      <div className="border bg-white rounded overflow-hidden">
+        <div className="bg-gray-50 border-b p-4 flex justify-between items-center">
+          <h2 className="font-semibold">Test Scenario Details</h2>
           <div className="space-x-2">
-            <Button size="sm" variant="outline">
+            <Button size="sm" variant="outline" onClick={() => setOpenScenarioEdit(true)} className='cursor-pointer'>
               Edit
             </Button>
             <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white">
@@ -78,14 +110,10 @@ const TestScenarioDetail: React.FC = () => {
           <DetailItem label="Scenario Type" value={data.type} />
           <DetailItem label="Scenario Category" value={data.category || '-'} />
 
-          {/* Steps */}
           <div>
-            <p className="text-[11px] font-semibold text-[#8B6E6E] uppercase tracking-[0.08em] mb-2">
-              Steps to Execute
-            </p>
-
+            <p className="font-semibold mb-2">Steps to Execute</p>
             {steps.length > 0 ? (
-              <ol className="list-decimal list-inside space-y-2 text-sm text-[#2B1F1F] font-medium">
+              <ol className="list-decimal list-inside space-y-1">
                 {steps.map((step: any, index: number) => (
                   <li key={index}>
                     {step.action} → {step.target}
@@ -97,13 +125,10 @@ const TestScenarioDetail: React.FC = () => {
             )}
           </div>
 
-          {/* Flow Structure (Selectors equivalent) */}
           {flowStructure && (
             <div>
-              <p className="text-[11px] font-semibold text-[#8B6E6E] uppercase tracking-[0.08em] mb-2">
-                Flow Structure
-              </p>
-              <pre className="text-sm bg-gray-50 p-3 rounded overflow-auto">
+              <p className="font-semibold mb-2">Flow Structure</p>
+              <pre className="bg-gray-50 p-3 rounded overflow-auto text-sm">
                 {JSON.stringify(flowStructure, null, 2)}
               </pre>
             </div>
@@ -112,10 +137,17 @@ const TestScenarioDetail: React.FC = () => {
       </div>
 
       {/* TEST CASES */}
-      <div className="mt-6 border border-[#E4D7D7] bg-white rounded-[6px] overflow-hidden">
-        <div className="bg-[#FFF8F8] border-b border-[#E4D7D7] py-3 px-4 flex justify-between items-center">
-          <h2 className="text-[15px] font-semibold text-[#322525]">Test Cases</h2>
-          <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white">
+      <div className="mt-6 border bg-white rounded overflow-hidden">
+        <div className="bg-gray-50 border-b p-4 flex justify-between items-center">
+          <h2 className="font-semibold">Test Cases</h2>
+          <Button
+            size="sm"
+            className="bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+            onClick={() => {
+              setEditTestCaseId(null)
+              setOpenTestCaseModal(true)
+            }}
+          >
             Add Test Case
           </Button>
         </div>
@@ -129,16 +161,48 @@ const TestScenarioDetail: React.FC = () => {
           />
         </div>
       </div>
+
+      <ConfirmModal
+        open={openDeleteModal}
+        title="Confirm Deletion"
+        message="Are you sure you want to delete this test case?"
+        confirmText="Delete"
+        variant="danger"
+        isLoading={deleteTestCaseMutation.isPending}
+        onCancel={() => {
+          setOpenDeleteModal(false)
+          setSelectedTestCaseId(null)
+        }}
+        onConfirm={handleConfirmDelete}
+      />
+
+      {openTestCaseModal && (
+        <TestCaseSheetForm
+          open={openTestCaseModal}
+          onOpenChange={(value) => {
+            setOpenTestCaseModal(value)
+            if (!value) setEditTestCaseId(null)
+          }}
+          testCaseId={editTestCaseId}
+          scenarioId={Number(tsid)}
+        />
+      )}
+
+      {openScenarioEdit && (
+        <TestScenarioSheetForm
+          open={openScenarioEdit}
+          onOpenChange={setOpenScenarioEdit}
+          initialData={data}
+        />
+      )}
     </div>
   )
 }
 
 const DetailItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div>
-    <p className="text-[11px] font-semibold text-[#8B6E6E] uppercase tracking-[0.08em] mb-1.5">
-      {label}
-    </p>
-    <p className="text-sm text-[#2B1F1F] font-medium leading-relaxed">{value}</p>
+    <p className="text-xs font-semibold uppercase text-gray-500">{label}</p>
+    <p className="text-sm">{value}</p>
   </div>
 )
 

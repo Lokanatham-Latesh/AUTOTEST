@@ -32,3 +32,9 @@ class ScenarioDetailResponse(BaseModel):
     created_on: datetime | None
     data: Optional[Dict[str, Any]]
     test_cases: List[TestCaseDetailResponse]
+
+class UpdateScenarioRequest(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    type: Optional[str] = None
+    data: Optional[Dict] = None

@@ -42,3 +42,20 @@ export interface ScenarioDetailResponse {
   data: Record<string, any> | null
   test_cases: TestCaseDetail[]
 }
+
+export interface UpdateScenarioPayload {
+  title?: string
+  category?: string
+  type?: string
+  data?: Record<string, any>
+}
+export interface ScenarioUpdateResponse {
+  id: number
+  title: string
+  type: string
+  category: string | null
+  data: Record<string, any> | null
+  updated_on: string
+  updated_by: number
+}
+
