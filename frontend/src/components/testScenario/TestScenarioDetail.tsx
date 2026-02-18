@@ -95,7 +95,7 @@ const TestScenarioDetail: React.FC = () => {
         <div className="bg-gray-50 border-b p-4 flex justify-between items-center">
           <h2 className="font-semibold">Test Scenario Details</h2>
           <div className="space-x-2">
-            <Button size="sm" variant="outline" onClick={() => setOpenScenarioEdit(true)}>
+            <Button size="sm" variant="outline" onClick={() => setOpenScenarioEdit(true)} className='cursor-pointer'>
               Edit
             </Button>
             <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white">
@@ -142,7 +142,7 @@ const TestScenarioDetail: React.FC = () => {
           <h2 className="font-semibold">Test Cases</h2>
           <Button
             size="sm"
-            className="bg-red-600 hover:bg-red-700 text-white"
+            className="bg-red-600 hover:bg-red-700 text-white cursor-pointer"
             onClick={() => {
               setEditTestCaseId(null)
               setOpenTestCaseModal(true)
@@ -184,6 +184,7 @@ const TestScenarioDetail: React.FC = () => {
             if (!value) setEditTestCaseId(null)
           }}
           testCaseId={editTestCaseId}
+          scenarioId={Number(tsid)}
         />
       )}
 

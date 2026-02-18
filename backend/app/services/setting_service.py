@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, asc, desc
-from datetime import datetime
+from datetime import datetime, timezone
 from shared_orm.models.setting_category import SettingCategory
 from shared_orm.models.setting import Setting
 from sqlalchemy import func
@@ -121,7 +121,7 @@ class SettingService:
                 setting = settings_map[item.id]
                 setting.actual_value = item.actual_value
                 setting.updated_by = updated_by_user_id
-                setting.updated_on = datetime.utcnow()
+                setting.updated_on = datetime.now(timezone.utc)
                 
 
             db.commit()

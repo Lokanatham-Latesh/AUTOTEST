@@ -13,12 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useTestCaseDetails, useUpdateTestCaseMutation } from '@/utils/queries/testCaseQueries'
+import { useCreateTestCaseMutation, useTestCaseDetails, useUpdateTestCaseMutation } from '@/utils/queries/testCaseQueries'
 
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   testCaseId?: number | null
+  scenarioId?: number
 }
 
 type FormValues = {
@@ -31,12 +32,13 @@ type FormValues = {
   data: string
 }
 
-export function TestCaseSheetForm({ open, onOpenChange, testCaseId }: Props) {
+export function TestCaseSheetForm({ open, onOpenChange, testCaseId,scenarioId }: Props) {
   const isEditMode = !!testCaseId
 
   const { data: initialData, isLoading } = useTestCaseDetails(testCaseId ?? 0)
 
   const updateMutation = useUpdateTestCaseMutation()
+  const createMutation = useCreateTestCaseMutation()
 
   const {
     register,
@@ -88,7 +90,7 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId }: Props) {
 
   const onSubmit = (formData: FormValues) => {
     try {
-      const payload = {
+      const parsedPayload = {
         title: formData.title,
         type: formData.type,
         is_valid: formData.is_valid,
@@ -98,27 +100,37 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId }: Props) {
         data: formData.data ? JSON.parse(formData.data) : null,
       }
 
-      if (!testCaseId) {
-        toast.info('Create API integration pending')
-        return
+      if (isEditMode && testCaseId) {
+        updateMutation.mutate(
+          { testCaseId, payload: parsedPayload },
+          {
+            onSuccess: () => {
+              toast.success('Test case updated successfully')
+              onOpenChange(false)
+            },
+            onError: () => toast.error('Failed to update test case'),
+          },
+        )
+      } else {
+        createMutation.mutate(
+          {
+            test_scenario_id: scenarioId!,
+            ...parsedPayload,
+          },
+          {
+            onSuccess: () => {
+              toast.success('Test case created successfully')
+              onOpenChange(false)
+            },
+            onError: () => toast.error('Failed to create test case'),
+          },
+        )
       }
-
-      updateMutation.mutate(
-        { testCaseId, payload },
-        {
-          onSuccess: () => {
-            toast.success('Test case updated successfully')
-            onOpenChange(false)
-          },
-          onError: () => {
-            toast.error('Failed to update test case')
-          },
-        },
-      )
     } catch {
-      toast.error('Invalid JSON format. Please check your input.')
+      toast.error('Invalid JSON format')
     }
   }
+
 
   if (isEditMode && isLoading) {
     return (
