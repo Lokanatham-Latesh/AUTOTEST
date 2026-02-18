@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, asc, desc
-from datetime import datetime
+from datetime import datetime, timezone
 from shared_orm.models.provider import Provider
 from shared_orm.models.provider_model import ProviderModel
 from shared_orm.models.user import User
@@ -124,7 +124,7 @@ class ProviderService:
                 provider_model.temperature = item.temperature
 
             provider_model.updated_by = updated_by
-            provider_model.updated_on = datetime.utcnow()
+            provider_model.updated_on = datetime.now(timezone.utc)
 
             updated_models.append(provider_model)
 
@@ -197,7 +197,7 @@ class ProviderService:
             detail="No providers found to update."
         )
         provider_map = {p.id: p for p in providers}
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for item in payload:
             provider = provider_map.get(item.provider_id)
             if not provider:

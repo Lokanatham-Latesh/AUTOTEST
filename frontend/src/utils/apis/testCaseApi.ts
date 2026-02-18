@@ -1,5 +1,5 @@
 import api from '../axios'
-import type { TestCaseDetailResponse, UpdateTestCasePayload } from '@/types/testCase'
+import type { CreateTestCasePayload, TestCaseDetailResponse, UpdateTestCasePayload } from '@/types/testCase'
 
 export const testCaseApi = {
   getTestCase: async (testCaseId: number): Promise<TestCaseDetailResponse> => {
@@ -16,5 +16,9 @@ export const testCaseApi = {
   },
   deleteTestCase: async (testCaseId: number): Promise<void> => {
     await api.delete(`/test-cases/${testCaseId}`)
+  },
+  createTestCase: async (payload: CreateTestCasePayload): Promise<TestCaseDetailResponse> => {
+    const { data } = await api.post(`/test-cases`, payload)
+    return data
   },
 }

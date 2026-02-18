@@ -8,11 +8,37 @@ from app.services.test_case_service import TestCaseService
 from app.schemas.test_case_schema import (
     TestCaseDetailResponse,
     UpdateTestCaseRequest,
+    TestCaseResponse, CreateTestCaseRequest
 )
 
 router = APIRouter(prefix="/test-cases", tags=["Test Cases"])
 
 test_case_service = TestCaseService()
+
+# -----------------------------------
+# Create Test Case
+# -----------------------------------
+@router.post(
+    "",
+    response_model=TestCaseResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create test case"
+)
+def create_test_case(
+    payload: CreateTestCaseRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required),
+):
+    """
+    Create a new test case under a given test scenario.
+    Automatically derives page_id from scenario.
+    """
+    return test_case_service.create_test_case(
+        db=db,
+        test_scenario_id=payload.test_scenario_id,
+        payload=payload.model_dump(exclude_unset=True),
+        user=current_user
+    )
 
 
 # -----------------------------------------

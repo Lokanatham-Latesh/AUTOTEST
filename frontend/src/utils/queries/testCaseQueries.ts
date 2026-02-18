@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { testCaseApi } from '../apis/testCaseApi'
-import type { UpdateTestCasePayload } from '@/types/testCase'
+import type { CreateTestCasePayload, UpdateTestCasePayload } from '@/types/testCase'
 
 export const useTestCaseDetails = (testCaseId: number) => {
   return useQuery({
@@ -33,6 +33,20 @@ export const useDeleteTestCaseMutation = () => {
     mutationFn: (testCaseId: number) => testCaseApi.deleteTestCase(testCaseId),
 
     onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['scenario-details'],
+      })
+    },
+  })
+}
+
+export const useCreateTestCaseMutation = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: CreateTestCasePayload) => testCaseApi.createTestCase(payload),
+
+    onSuccess: (_) => {
       queryClient.invalidateQueries({
         queryKey: ['scenario-details'],
       })

@@ -2,7 +2,7 @@ import asyncio
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, asc, desc
 from fastapi import HTTPException, status
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import func
 from shared_orm.models.site import Site
 from app.schemas.site_schema import SiteCreate, SiteUpdate,SiteInfoResponse
@@ -31,7 +31,7 @@ class SiteService:
             site_title=data.site_title,
             status ="New",
             site_url=str(data.site_url),
-            created_on=datetime.utcnow(),
+            created_on=datetime.now(timezone.utc),
             created_by= user.id
         )
 
@@ -43,7 +43,7 @@ class SiteService:
             "site_id": site.id,
             "site_url": site.site_url,
             "requested_by": user.id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         asyncio.create_task(
             rabbitmq_producer.publish_message(
@@ -109,7 +109,7 @@ class SiteService:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(site, field, value)
 
-        site.updated_on = datetime.utcnow()
+        site.updated_on = datetime.now(timezone.utc)
         db.commit()
         db.refresh(site)
         return site

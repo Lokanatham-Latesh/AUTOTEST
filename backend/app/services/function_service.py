@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, asc, desc
-from datetime import datetime
+from datetime import datetime, timezone
 from shared_orm.models.function import AppFunction
 from shared_orm.models.function_provider_model import FunctionProviderModel
 from sqlalchemy import func
@@ -82,7 +82,7 @@ class FunctionService:
             FunctionProviderModel.provider_id == provider_id,
             FunctionProviderModel.provider_model_id == model_id
         ).first()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if function_provider_model:
              function_provider_model.additional_info = additional_info
              function_provider_model.updated_by = current_user.id

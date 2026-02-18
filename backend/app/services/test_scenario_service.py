@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session,joinedload
 from sqlalchemy import func
 from fastapi import HTTPException, status
-from datetime import datetime
+from datetime import datetime, timezone
 from shared_orm.models.test_scenario import TestScenario
 from shared_orm.models.test_case import TestCase
 from shared_orm.models.page import Page
@@ -219,7 +219,7 @@ class ScenarioService:
             if field in payload:
                 setattr(scenario, field, payload[field])
 
-        scenario.updated_on = datetime.utcnow()
+        scenario.updated_on = datetime.now(timezone.utc)
         scenario.updated_by = user.id
         db.commit()
         db.refresh(scenario)

@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime,timezone
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 
 from shared_orm.models.test_case import TestCase
+from shared_orm.models.test_scenario import TestScenario
 from shared_orm.models.user import User
 from app.config.logger import logger
 
@@ -13,6 +14,73 @@ class TestCaseService:
     business logic including retrieval and updates.
     """
 
+    # -------------------------------
+    # Create Test Case
+    # -------------------------------
+    def create_test_case(
+        self,
+        db: Session,
+        test_scenario_id: int,
+        payload: dict,
+        user: User
+    ) -> TestCase:
+        """
+        Create a new test case under a given test scenario.
+
+        Automatically derives page_id from the associated test scenario.
+
+        Args:
+            db (Session): Active database session.
+            test_scenario_id (int): ID of the parent test scenario.
+            payload (dict): Test case creation payload.
+            user (User): Authenticated user creating the test case.
+
+        Returns:
+            TestCase: Newly created test case instance.
+
+        Raises:
+            HTTPException: If test scenario does not exist.
+        """
+        logger.info(
+            f"[CREATE_TEST_CASE_REQUEST] "
+            f"ScenarioID={test_scenario_id} CreatedBy={user.id}"
+        )
+        # Validate Scenario
+        scenario = db.query(TestScenario).filter(
+            TestScenario.id == test_scenario_id
+        ).first()
+        if not scenario:
+            logger.warning(
+                f"[CREATE_TEST_CASE_FAILED] "
+                f"Scenario not found | ScenarioID={test_scenario_id}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Test Scenario not found"
+            )
+        new_test_case = TestCase(
+            page_id=scenario.page_id,  
+            test_scenario_id=test_scenario_id,
+            title=payload.get("title"),
+            type=payload.get("type", "auto-generated"),
+            data=payload.get("data"),
+            expected_outcome=payload.get("expected_outcome"),
+            validation=payload.get("validation"),
+            is_valid=payload.get("is_valid", True),
+            is_valid_default=payload.get("is_valid_default", False),
+            created_on=datetime.now(timezone.utc),
+            created_by=user.id,
+        )
+        db.add(new_test_case)
+        db.commit()
+        db.refresh(new_test_case)
+        logger.info(
+            f"[CREATE_TEST_CASE_SUCCESS] "
+            f"TestCaseID={new_test_case.id} "
+            f"ScenarioID={test_scenario_id} CreatedBy={user.id}"
+        )
+        return new_test_case
+        
     # -------------------------------
     # Get Test Case Details
     # -------------------------------
@@ -125,7 +193,7 @@ class TestCaseService:
                 setattr(test_case, field, payload[field])
 
         # Audit fields
-        test_case.updated_on = datetime.utcnow()
+        test_case.updated_on = datetime.now(timezone.utc)
         test_case.updated_by = user.id
 
         db.commit()
