@@ -23,6 +23,7 @@ type DynamicTableProps<T> = {
   actions?: TableAction<T>[]
   getRowKey: (row: T) => string | number
   onRowClick?: (row: T) => void
+  getRowClassName?: (row: T) => string
 }
 
 export function DynamicTable<T>({
@@ -31,9 +32,10 @@ export function DynamicTable<T>({
   actions,
   getRowKey,
   onRowClick,
+  getRowClassName,
 }: DynamicTableProps<T>) {
   return (
-    <Table className="table-fixed">
+    <Table className="table-fixed w-full">
       <TableHeader className="bg-muted/40">
         <TableRow>
           {columns.map((col) => (
@@ -48,7 +50,7 @@ export function DynamicTable<T>({
               {col.header}
             </TableHead>
           ))}
-          {actions && <TableHead className="w-20 text-right">Action</TableHead>}
+          {actions && <TableHead className="w-16 text-right">Action</TableHead>}
         </TableRow>
       </TableHeader>
 
@@ -66,21 +68,36 @@ export function DynamicTable<T>({
               className={cn(
                 'border-b last:border-b-0',
                 onRowClick && 'hover:bg-gray-50 cursor-pointer',
+                getRowClassName?.(row),
               )}
               onClick={() => onRowClick?.(row)}
             >
-              {columns.map((col) => (
-                <TableCell
-                  key={col.key}
-                  className={cn(
-                    col.align === 'center' && 'text-center',
-                    col.align === 'right' && 'text-right',
-                    'max-w-[220px] truncate',
-                  )}
-                >
-                  {col.render(row)}
-                </TableCell>
-              ))}
+              {columns.map((col) => {
+                const value = col.render(row)
+
+                return (
+                  <TableCell
+                    key={col.key}
+                    className={cn(
+                      col.width,
+                      col.align === 'center' && 'text-center',
+                      col.align === 'right' && 'text-right',
+                      !col.width && 'max-w-[220px] truncate',
+                    )}
+                  >
+                    {col.key === 'title' ? (
+                      <div
+                        className="truncate"
+                        title={(row as any)[col.key] ?? (row as any).page_title ?? undefined}
+                      >
+                        {value}
+                      </div>
+                    ) : (
+                      value
+                    )}
+                  </TableCell>
+                )
+              })}
 
               {actions && (
                 <TableCell className="text-right">

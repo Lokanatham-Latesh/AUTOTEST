@@ -6,6 +6,7 @@ export type TableColumn<T> = {
   width?: string
   align?: 'left' | 'center' | 'right'
   render: (row: T) => ReactNode
+  
 }
 
 export type TableAction<T> = {

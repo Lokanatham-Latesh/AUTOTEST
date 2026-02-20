@@ -31,9 +31,9 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
     {
       key: 'title',
       header: 'Title',
-      width: 'w-[30%]',
+      width: 'w-[420px]',
       render: (row) => (
-        <div className="truncate max-w-[250px]" title={row.title}>
+        <div className="whitespace-normal wrap-break-word" title={row.title}>
           {row.title}
         </div>
       ),
@@ -41,19 +41,21 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
     {
       key: 'type',
       header: 'Type',
-      width: 'w-[15%]',
+      width: 'w-[140px]',
+      align: 'center',
       render: (row) => row.type,
     },
     {
       key: 'category',
       header: 'Category',
-      width: 'w-[20%]',
+      width: 'w-[180px]',
+      align: 'center',
       render: (row) => row.category,
     },
     {
       key: 'count',
       header: 'Test Cases',
-      width: 'w-[15%]',
+      width: 'w-[120px]',
       align: 'center',
       render: (row) => row.test_case_count,
     },
