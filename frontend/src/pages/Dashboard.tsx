@@ -9,11 +9,13 @@ import { AddSiteSheet } from '@/components/site/AddSiteDialog'
 import type { SortType } from '@/types'
 import { useWebSocketContext } from '@/contexts/WebSocketProvider'
 import { useDeleteSiteMutation } from '@/utils/queries/sitesQuery'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 
 const Dashboard: React.FC = React.memo(() => {
   const [search, setSearch] = React.useState('')
   const [openAdd, setOpenAdd] = React.useState(false)
-
+  const [openDeleteModal, setOpenDeleteModal] = React.useState(false)
+  const [selectedSiteId, setSelectedSiteId] = React.useState<number | null>(null)
   const [sort, setSort] = React.useState<SortType>('created_desc')
 
   const [page, setPage] = React.useState(1)
@@ -57,18 +59,27 @@ const Dashboard: React.FC = React.memo(() => {
     )
   }
 
-  const handleDelete = (site: any) => {
-    if (!confirm('Are you sure you want to delete this site?')) return
+  
 
-    deleteSiteMutation.mutate(Number(site.id), {
-      onSuccess: () => {
-        toast.success('Site deleted successfully')
-      },
-      onError: (error: any) => {
-        toast.error(error?.response?.data?.detail || 'Failed to delete site')
-      },
-    })
+  const handleDelete = (site: any) => {
+    setSelectedSiteId(Number(site.id))
+    setOpenDeleteModal(true)
   }
+
+const handleConfirmDelete = () => {
+  if (!selectedSiteId) return
+
+  deleteSiteMutation.mutate(selectedSiteId, {
+    onSuccess: () => {
+      toast.success('Site deleted successfully')
+      setOpenDeleteModal(false)
+      setSelectedSiteId(null)
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Failed to delete site')
+    },
+  })
+}
 
 
   return (
@@ -105,6 +116,19 @@ const Dashboard: React.FC = React.memo(() => {
               setPageSize(size)
               setPage(1)
             }}
+          />
+          <ConfirmModal
+            open={openDeleteModal}
+            title="Confirm Deletion"
+            message="Are you sure you want to delete this site?"
+            confirmText="Delete"
+            variant="danger"
+            isLoading={deleteSiteMutation.isPending}
+            onCancel={() => {
+              setOpenDeleteModal(false)
+              setSelectedSiteId(null)
+            }}
+            onConfirm={handleConfirmDelete}
           />
         </>
       )}

@@ -19,7 +19,7 @@ export const ConfirmModal = ({
         {/* Header */}
         <div className="flex items-center justify-between border-b px-6 py-4">
           <h2 className="text-xl font-semibold">{title}</h2>
-          <button onClick={onCancel} className="text-red-500 text-xl">
+          <button onClick={onCancel} className="text-red-500 text-xl cursor-pointer">
             ✕
           </button>
         </div>
@@ -29,14 +29,14 @@ export const ConfirmModal = ({
 
         {/* Footer */}
         <div className="flex justify-end gap-4 border-t px-6 py-4">
-          <button onClick={onCancel} className="rounded-lg border px-4 py-2" disabled={isLoading}>
+          <button onClick={onCancel} className="rounded-lg border px-4 py-2 cursor-pointer" disabled={isLoading}>
             {cancelText}
           </button>
 
           <button
             onClick={onConfirm}
             disabled={isLoading}
-            className={`rounded-lg px-4 py-2 text-white ${
+            className={`rounded-lg px-4 py-2 text-white cursor-pointer ${
               variant === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >

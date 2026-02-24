@@ -17,14 +17,13 @@ export const useUpdateTestCaseMutation = () => {
     mutationFn: ({ testCaseId, payload }: { testCaseId: number; payload: UpdateTestCasePayload }) =>
       testCaseApi.updateTestCase(testCaseId, payload),
 
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ['test-case-details', variables.testCaseId],
+        queryKey: ['scenario-details'],
       })
     },
   })
 }
-
 
 export const useDeleteTestCaseMutation = () => {
   const queryClient = useQueryClient()
