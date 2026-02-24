@@ -107,11 +107,11 @@ const TestScenarioDetail: React.FC = () => {
               size="sm"
               variant="outline"
               onClick={() => setOpenScenarioEdit(true)}
-              className="cursor-p"
+              className="cursor-pointer"
             >
               Edit
             </Button>
-            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white">
+            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white cursor-pointer">
               Execute
             </Button>
           </div>

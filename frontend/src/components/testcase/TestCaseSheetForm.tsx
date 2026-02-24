@@ -272,8 +272,13 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId, scenarioId }
           </div>
 
           <SheetFooter className="border-t px-6 py-4 bg-white shrink-0">
-            <div className="flex justify-end gap-3 w-full cursor-pointer">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <div className="flex justify-end gap-3 w-full">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="cursor-pointer"
+              >
                 Cancel
               </Button>
 

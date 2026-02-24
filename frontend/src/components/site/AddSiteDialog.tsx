@@ -41,7 +41,7 @@ export function AddSiteSheet({ open, onOpenChange, onSubmit }: Props) {
             onClick={() => onOpenChange(false)}
             className="absolute right-4 top-4 text-muted-foreground hover:text-foreground cursor-pointer"
           >
-            <X className="h-4 w-4 " />
+            <X className="h-4 w-4 cursor-pointer" />
           </button>
         </SheetHeader>
 
