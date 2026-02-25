@@ -64,10 +64,14 @@ export function EditPageTitleDialog({ open, onOpenChange, pageId, currentTitle }
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={updateMutation.isPending}>
+          <Button
+            onClick={handleSubmit}
+            disabled={updateMutation.isPending}
+            className="cursor-pointer"
+          >
             {updateMutation.isPending ? 'Updating...' : 'Save'}
           </Button>
         </DialogFooter>

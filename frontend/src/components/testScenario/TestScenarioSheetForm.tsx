@@ -186,7 +186,13 @@ export function TestScenarioSheetForm({ open, onOpenChange, initialData }: Props
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <Label>Steps</Label>
-                <Button type="button" variant="ghost" size="sm" onClick={handleAddStep}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleAddStep}
+                  className="cursor-pointer"
+                >
                   <Plus className="mr-1 h-4 w-4" /> Add Step
                 </Button>
               </div>
@@ -197,7 +203,13 @@ export function TestScenarioSheetForm({ open, onOpenChange, initialData }: Props
                     placeholder="action - target"
                     {...register(`steps.${index}.value`, { required: true })}
                   />
-                  <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => remove(index)}
+                    className="cursor-pointer"
+                  >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -208,7 +220,7 @@ export function TestScenarioSheetForm({ open, onOpenChange, initialData }: Props
           <SheetFooter className="border-t px-6 py-4">
             <Button
               type="submit"
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover:bg-red-700 cursor-pointer"
               disabled={updateMutation.isPending}
             >
               {updateMutation.isPending ? 'Saving...' : 'Save'}

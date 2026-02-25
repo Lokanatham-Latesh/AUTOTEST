@@ -56,17 +56,25 @@ const TestScenarioDetail: React.FC = () => {
   }
 
   const testCaseColumns: TableColumn<TestCase>[] = [
-    { key: 'title', header: 'Title', render: (row) => row.title },
-    { key: 'type', header: 'Type', render: (row) => row.type },
     {
-      key: 'is_valid',
-      header: 'Valid',
-      render: (row) => (row.is_valid ? 'True' : 'False'),
+      key: 'title',
+      header: 'Title',
+      width: 'w-[400px]',
+      render: (row) => <div className="whitespace-normal wrap-break-word">{row.title}</div>,
     },
     {
-      key: 'is_valid_default',
-      header: 'Valid Default',
-      render: (row) => (row.is_valid_default ? 'True' : 'False'),
+      key: 'type',
+      header: 'Type',
+      width: 'w-[140px]',
+      align: 'center',
+      render: (row) => row.type,
+    },
+    {
+      key: 'auth_required',
+      header: 'Auth Required',
+      width: 'w-[160px]',
+      align: 'center',
+      render: (row) => (row.is_valid && row.is_valid_default ? 'Yes' : 'No'),
     },
   ]
 
@@ -92,13 +100,18 @@ const TestScenarioDetail: React.FC = () => {
     <div>
       {/* SCENARIO DETAILS */}
       <div className="border bg-white rounded overflow-hidden">
-        <div className="bg-gray-50 border-b p-4 flex justify-between items-center">
+        <div className="bg-[#FFF8F8] border-b p-4 flex justify-between items-center">
           <h2 className="font-semibold">Test Scenario Details</h2>
           <div className="space-x-2">
-            <Button size="sm" variant="outline" onClick={() => setOpenScenarioEdit(true)} className='cursor-pointer'>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setOpenScenarioEdit(true)}
+              className="cursor-pointer"
+            >
               Edit
             </Button>
-            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white">
+            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white cursor-pointer">
               Execute
             </Button>
           </div>
@@ -138,7 +151,7 @@ const TestScenarioDetail: React.FC = () => {
 
       {/* TEST CASES */}
       <div className="mt-6 border bg-white rounded overflow-hidden">
-        <div className="bg-gray-50 border-b p-4 flex justify-between items-center">
+        <div className="bg-[#FFF8F8] border-b p-4 flex justify-between items-center">
           <h2 className="font-semibold">Test Cases</h2>
           <Button
             size="sm"
@@ -152,12 +165,13 @@ const TestScenarioDetail: React.FC = () => {
           </Button>
         </div>
 
-        <div className="p-6">
+        <div className="">
           <DynamicTable
             data={data.test_cases}
             columns={testCaseColumns}
             actions={testCaseActions}
             getRowKey={(row) => row.id}
+            getRowClassName={(row) => (row.is_valid && row.is_valid_default ? 'bg-red-50' : '')}
           />
         </div>
       </div>

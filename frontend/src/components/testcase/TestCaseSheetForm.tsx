@@ -1,5 +1,5 @@
 import { useForm } from 'react-hook-form'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useCreateTestCaseMutation, useTestCaseDetails, useUpdateTestCaseMutation } from '@/utils/queries/testCaseQueries'
+import {
+  useCreateTestCaseMutation,
+  useTestCaseDetails,
+  useUpdateTestCaseMutation,
+} from '@/utils/queries/testCaseQueries'
 
 type Props = {
   open: boolean
@@ -32,10 +36,10 @@ type FormValues = {
   data: string
 }
 
-export function TestCaseSheetForm({ open, onOpenChange, testCaseId,scenarioId }: Props) {
+export function TestCaseSheetForm({ open, onOpenChange, testCaseId, scenarioId }: Props) {
   const isEditMode = !!testCaseId
 
-  const { data: initialData, isLoading } = useTestCaseDetails(testCaseId ?? 0)
+  const { data: initialData, isLoading } = useTestCaseDetails(isEditMode ? testCaseId! : 0)
 
   const updateMutation = useUpdateTestCaseMutation()
   const createMutation = useCreateTestCaseMutation()
@@ -50,7 +54,7 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId,scenarioId }:
   } = useForm<FormValues>({
     defaultValues: {
       title: '',
-      type: 'auto-generated',
+      type: 'manual',
       is_valid: true,
       is_valid_default: false,
       validation: '',
@@ -59,12 +63,16 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId,scenarioId }:
     },
   })
 
-  // Populate for Edit / Reset for Add
+  // Store initial form snapshot (for edit comparison)
+  const initialFormRef = useRef<FormValues | null>(null)
+  const hasUserEditedRef = useRef(false)
+
+  // Load initial values
   useEffect(() => {
     if (!open) return
 
     if (initialData && isEditMode) {
-      reset({
+      const formattedData: FormValues = {
         title: initialData.title,
         type: initialData.type,
         is_valid: initialData.is_valid,
@@ -74,19 +82,43 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId,scenarioId }:
           ? JSON.stringify(initialData.expected_outcome, null, 2)
           : '',
         data: initialData.data ? JSON.stringify(initialData.data, null, 2) : '',
-      })
+      }
+
+      initialFormRef.current = formattedData
+      hasUserEditedRef.current = false
+      reset(formattedData)
     } else {
-      reset({
+      const defaultData: FormValues = {
         title: '',
-        type: 'auto-generated',
+        type: 'manual',
         is_valid: true,
         is_valid_default: false,
         validation: '',
         expected_outcome: '',
         data: '',
-      })
+      }
+
+      initialFormRef.current = defaultData
+      hasUserEditedRef.current = false
+      reset(defaultData)
     }
   }, [open, initialData, isEditMode, reset])
+
+  const watchedValues = watch()
+
+  useEffect(() => {
+    if (!isEditMode || !initialFormRef.current) return
+
+    const { type, ...currentWithoutType } = watchedValues
+    const { type: _, ...initialWithoutType } = initialFormRef.current
+
+    const hasChanged = JSON.stringify(currentWithoutType) !== JSON.stringify(initialWithoutType)
+
+    if (hasChanged && !hasUserEditedRef.current) {
+      hasUserEditedRef.current = true
+      setValue('type', 'manual')
+    }
+  }, [watchedValues, isEditMode, setValue])
 
   const onSubmit = (formData: FormValues) => {
     try {
@@ -131,7 +163,6 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId,scenarioId }:
     }
   }
 
-
   if (isEditMode && isLoading) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
@@ -145,25 +176,27 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId,scenarioId }:
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex flex-col h-full max-h-screen w-[520px] p-0">
-        {/* HEADER (Fixed) */}
         <SheetHeader className="border-b px-6 py-4 shrink-0">
           <SheetTitle>{isEditMode ? 'Edit Test Case' : 'Add Test Case'}</SheetTitle>
         </SheetHeader>
 
-        {/* FORM */}
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
-          {/* SCROLLABLE BODY */}
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
             {/* Title */}
             <div className="space-y-2">
               <Label>Title</Label>
-              <Input {...register('title', { required: 'Title is required' })} />
+              <Input
+                {...register('title', {
+                  required: 'Title is required',
+                })}
+              />
               {errors.title && <p className="text-xs text-red-600">{errors.title.message}</p>}
             </div>
 
             {/* Type */}
             <div className="space-y-2">
               <Label>Type</Label>
+
               <Select
                 value={watch('type')}
                 onValueChange={(v) => setValue('type', v as 'auto-generated' | 'manual')}
@@ -171,8 +204,15 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId,scenarioId }:
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
+
                 <SelectContent>
-                  <SelectItem value="auto-generated">Auto-Generated</SelectItem>
+                  {/* Show auto-generated only in edit mode */}
+                  {isEditMode && (
+                    <SelectItem value="auto-generated" disabled={hasUserEditedRef.current}>
+                      Auto-Generated
+                    </SelectItem>
+                  )}
+
                   <SelectItem value="manual">Manual</SelectItem>
                 </SelectContent>
               </Select>
@@ -224,26 +264,30 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId,scenarioId }:
               <Textarea rows={4} {...register('expected_outcome')} />
             </div>
 
-            {/* Test Case Data */}
+            {/* Data */}
             <div className="space-y-2">
               <Label>Test Case Data (JSON)</Label>
               <Textarea rows={6} {...register('data')} />
             </div>
           </div>
 
-          {/* FOOTER (Fixed) */}
           <SheetFooter className="border-t px-6 py-4 bg-white shrink-0">
             <div className="flex justify-end gap-3 w-full">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="cursor-pointer"
+              >
                 Cancel
               </Button>
 
               <Button
                 type="submit"
-                disabled={updateMutation.isPending}
-                className="bg-red-600 hover:bg-red-700"
+                disabled={updateMutation.isPending || createMutation.isPending}
+                className="bg-red-600 hover:bg-red-700 cursor-pointer"
               >
-                {updateMutation.isPending ? 'Saving...' : 'Save'}
+                {updateMutation.isPending || createMutation.isPending ? 'Saving...' : 'Save'}
               </Button>
             </div>
           </SheetFooter>

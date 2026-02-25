@@ -8,6 +8,7 @@ import { PageTable } from '@/components/page/PageTable'
 import { useCreatePageMutation, useUnlinkedPagesQuery } from '@/utils/queries/pageQueries'
 import { useDeletePageMutation } from '@/utils/queries/pageQueries'
 import { toast } from 'sonner'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 
 const Pages = () => {
   const [search, setSearch] = useState('')
@@ -15,6 +16,8 @@ const Pages = () => {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [openAdd, setOpenAdd] = useState(false)
+  const [openDeleteModal, setOpenDeleteModal] = useState(false)
+  const [selectedPageId, setSelectedPageId] = useState<number | null>(null)
 
   const { data, isLoading } = useUnlinkedPagesQuery({
     page,
@@ -25,39 +28,42 @@ const Pages = () => {
   const deletePageMutation = useDeletePageMutation()
   const createPageMutation = useCreatePageMutation()
 
-
-const handleAdd = (values: { title: string; url: string }) => {
-  createPageMutation.mutate(
-    {
-      page_title: values.title,
-      page_url: values.url,
-    },
-    {
-      onSuccess: () => {
-        toast.success('Page created successfully')
-        setOpenAdd(false)
+  const handleAdd = (values: { title: string; url: string }) => {
+    createPageMutation.mutate(
+      {
+        page_title: values.title,
+        page_url: values.url,
       },
-      onError: (error: any) => {
-        toast.error(error?.response?.data?.detail || 'Failed to create page')
+      {
+        onSuccess: () => {
+          toast.success('Page created successfully')
+          setOpenAdd(false)
+        },
+        onError: (error: any) => {
+          toast.error(error?.response?.data?.detail || 'Failed to create page')
+        },
       },
-    },
-  )
-}
-
+    )
+  }
 
   const handleDeletePage = (pageId: number) => {
-    if (!confirm('Are you sure you want to delete this page?')) return
+    setSelectedPageId(pageId)
+    setOpenDeleteModal(true)
+  }
+  const handleConfirmDelete = () => {
+    if (!selectedPageId) return
 
-    deletePageMutation.mutate(pageId, {
+    deletePageMutation.mutate(selectedPageId, {
       onSuccess: () => {
         toast.success('Page deleted successfully')
+        setOpenDeleteModal(false)
+        setSelectedPageId(null)
       },
       onError: (error: any) => {
         toast.error(error?.response?.data?.detail || 'Failed to delete page')
       },
     })
   }
-
 
   return (
     <div className="flex h-full flex-col">
@@ -103,6 +109,19 @@ const handleAdd = (values: { title: string; url: string }) => {
               setPageSize(size)
               setPage(1)
             }}
+          />
+          <ConfirmModal
+            open={openDeleteModal}
+            title="Confirm Deletion"
+            message="Are you sure you want to delete this page?"
+            confirmText="Delete"
+            variant="danger"
+            isLoading={deletePageMutation.isPending}
+            onCancel={() => {
+              setOpenDeleteModal(false)
+              setSelectedPageId(null)
+            }}
+            onConfirm={handleConfirmDelete}
           />
         </>
       )}
