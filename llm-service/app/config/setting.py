@@ -21,10 +21,12 @@ class Settings(BaseSettings):
     PAGE_ANALYSE_QUEUE: str
     TEST_SCENARIO_QUEUE: str
     TEST_CASE_QUEUE:str
-
-    PAGE_EXTRACT_SINGLE_QUEUE = "page_extract_single_queue"
-
+    PAGE_EXTRACT_SINGLE_QUEUE:str
+    TEST_SCRIPT_QUEUE: str
+    TEST_EXECUTION_QUEUE: str
     LLM_QUEUE: str
+    SCENARIO_RERUN_QUEUE: str
+    
     PAGE_CRAWL_MAX_DEPTH: int = 2
     PAGE_CRAWL_UNLIMITED: bool = False
 

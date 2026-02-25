@@ -16,6 +16,7 @@ class Page(Base):
     page_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     page_source: Mapped[str | None] = mapped_column(Text, nullable=True)
     page_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # JSON with authentication/forms/etc.
+    is_auth_detected: Mapped[bool] = mapped_column(nullable=False, default=False)  # New field to indicate if authentication is detected
     created_on: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("user.id"), nullable=True)
     updated_on: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

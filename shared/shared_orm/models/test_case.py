@@ -32,7 +32,6 @@ class TestCase(Base):
 
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     type: Mapped[str] = mapped_column(TestCaseTypeEnum, nullable=False, default="auto-generated")
-
     data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     expected_outcome: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     validation: Mapped[dict | None] = mapped_column(JSON, nullable=True)

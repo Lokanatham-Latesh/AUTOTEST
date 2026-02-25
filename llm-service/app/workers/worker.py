@@ -1,3 +1,81 @@
+"""
+PIPELINE FLOW
+=============
+
+  PAGE_EXTRACT
+      │  page.status → "new"
+      ▼
+  PAGE_ANALYSE                        page.status → "generating_metadata"
+      │
+      ▼
+  TEST_SCENARIO_GENERATE              page.status → "generating_test_scenarios"
+      │
+      ▼
+  TEST_CASE_GENERATE                  page.status → "generating_test_cases"
+      │
+      ├── AUTH CHECK → LOGIN → PAGE_EXTRACT_SINGLE (new URLs only)
+      │                              │
+      │                              └─► PAGE_ANALYSE → TEST_SCENARIO
+      │                                  → TEST_CASE  (loops for new pages)
+      ▼
+  TEST_SCRIPT_GENERATE                page.status → "generating_test_scripts"
+      │   script saved to scenario.script / scenario.script_path
+      ▼
+  TEST_EXECUTION (blank)              page.status → "done"
+
+──────────────────────────────────────────────────────────────────
+PAUSE / RESUME  (site-level flag only)
+──────────────────────────────────────────────────────────────────
+  Pause:
+    • API sets site.status = "Paused"
+    • Every pipeline step checks _is_paused(site_id) at entry.
+      If paused → return early (page keeps its current status so
+      resume knows exactly where to restart from).
+
+  Resume:
+    • API sets site.status = "Processing" then publishes
+      event=SITE_RESUME with site_id.
+    • process_resume() scans all non-done pages for that site
+      and re-emits the correct queue message per page.status:
+
+        "new"  / "generating_metadata"       → PAGE_ANALYSE
+        "generating_test_scenarios"           → TEST_SCENARIO_GENERATE
+        "generating_test_cases"               → TEST_CASE_GENERATE
+        "generating_test_scripts"             → TEST_SCRIPT_GENERATE
+        "done"                                → skipped
+
+──────────────────────────────────────────────────────────────────
+WEBSOCKET — page status broadcast
+──────────────────────────────────────────────────────────────────
+  Every page.status change calls _notify_ws() which sends a
+  PAGE_STATUS_UPDATE message to the connected user (requested_by).
+
+──────────────────────────────────────────────────────────────────
+AUTH CREDENTIAL UPDATE  (separate entry point)
+──────────────────────────────────────────────────────────────────
+  process_auth_credential_update():
+    • Triggered from frontend when user changes login credentials.
+    • Resolves new credentials, drives Selenium to login, captures
+      landing URL, then emits PAGE_EXTRACT_SINGLE for that URL.
+    • New pages flow through the full pipeline independently.
+
+──────────────────────────────────────────────────────────────────
+SCENARIO RE-RUN  (targeted, single scenario)
+──────────────────────────────────────────────────────────────────
+  process_scenario_rerun():
+    • Frontend triggers re-run for one specific scenario.
+    • Sets page.status = "generating_test_cases".
+    • Emits TEST_CASE_GENERATE with scenario_id so only that
+      scenario's test cases + script are regenerated.
+
+──────────────────────────────────────────────────────────────────
+ANTI-LOOP GUARANTEE
+──────────────────────────────────────────────────────────────────
+  • PAGE_EXTRACT_SINGLE inserts only URLs absent from Page table.
+  • process_page_analyse early-returns when page.status != "new".
+  • _perform_login_and_discover checks landing URL before emitting.
+"""
+
 from datetime import datetime
 from urllib.parse import urlparse
 import asyncio
@@ -13,43 +91,283 @@ from app.config.database import SessionLocal
 from app.config.setting import settings
 from app.services.test_scenario_service import TestScenarioService
 from app.services.test_case_service import TestCaseService
+from app.services.test_credential_service import TestCredentialService
+from app.services.test_script_service import TestScriptService
+from app.websocket.manager import manager as ws_manager
 
 from shared_orm.models.site import Site
 from shared_orm.models.page import Page
 from shared_orm.models.site_alias import SiteAlias
 from shared_orm.models.test_scenario import TestScenario
+from shared_orm.models.test_case import TestCase
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Page status constants — single source of truth
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PageStatus:
+    NEW                       = "new"
+    GENERATING_METADATA       = "generating_metadata"
+    GENERATING_TEST_SCENARIOS = "generating_test_scenarios"
+    GENERATING_TEST_CASES     = "generating_test_cases"
+    GENERATING_TEST_SCRIPTS   = "generating_test_scripts"
+    DONE                      = "done"
+
+
+# Resume map: page.status → (queue, event, priority)
+# Pages in "new" or "generating_metadata" both restart at PAGE_ANALYSE
+# because metadata may be incomplete if paused mid-analysis.
+_RESUME_MAP = {
+    PageStatus.NEW:                       (settings.PAGE_ANALYSE_QUEUE,  "PAGE_ANALYSE",          5),
+    PageStatus.GENERATING_METADATA:       (settings.PAGE_ANALYSE_QUEUE,  "PAGE_ANALYSE",          5),
+    PageStatus.GENERATING_TEST_SCENARIOS: (settings.TEST_SCENARIO_QUEUE, "TEST_SCENARIO_GENERATE",5),
+    PageStatus.GENERATING_TEST_CASES:     (settings.TEST_CASE_QUEUE,     "TEST_CASE_GENERATE",    5),
+    PageStatus.GENERATING_TEST_SCRIPTS:   (settings.TEST_SCRIPT_QUEUE,   "TEST_SCRIPT_GENERATE",  5),
+    # PageStatus.DONE intentionally absent — nothing to resume
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 class WorkerService:
 
-    # ---------------- PAGE EXTRACT ---------------- #
+    # =========================================================================
+    # INTERNAL HELPERS
+    # =========================================================================
+
+    def _is_paused(self, site_id: int) -> bool:
+        """
+        Check whether the site is currently paused.
+        Opens its own short-lived DB session so it can be called anywhere.
+        """
+        with SessionLocal() as db:
+            site = db.query(Site).filter(Site.id == site_id).first()
+            return site is not None and site.status == "Paused"
+
+    def _set_page_status(self, db, page: Page, status: str, requested_by: int):
+        """
+        Update page.status + audit columns and flush (caller must commit).
+        Returns the page so callers can chain if needed.
+        """
+        page.status     = status
+        page.updated_on = datetime.utcnow()
+        page.updated_by = requested_by
+        db.flush()
+        return page
+
+    async def _notify_ws(self, page: Page, requested_by: int):
+        """
+        Send a PAGE_STATUS_UPDATE_QUEUE WebSocket message to the requesting user.
+        Fires-and-forgets on failure — a WS send error must never crash the pipeline.
+        """
+        # try:
+            # await backend_rabbitmq_producer.publish_message(
+            #     settings.PAGE_STATUS_UPDATE_QUEUE,
+            #     {
+            #         "page_id":    page.id,
+            #         "page_url":   page.page_url,
+            #         "site_id":    page.site_id,
+            #         "status":     page.status,
+            #         "updated_on": page.updated_on.isoformat() if page.updated_on else None,
+            #     }
+            # )
+
+            # await ws_manager.send(
+            #     requested_by,
+            #     {
+            #         "type": "PAGE_STATUS_UPDATE_QUEUE",
+            #         "payload": {
+            #             "page_id":    page.id,
+            #             "page_url":   page.page_url,
+            #             "site_id":    page.site_id,
+            #             "status":     page.status,
+            #             "updated_on": page.updated_on.isoformat() if page.updated_on else None,
+            #         },
+            #     },
+            # )
+        # except Exception as e:
+        #     logger.warning(f"[WS] Failed to send PAGE_STATUS_UPDATE_QUEUE | page_id={page.id} | {e}")
+
+    def _get_login_test_case(self, db, page_id: int):
+        """
+        Return the single canonical login test case for a page:
+          - scenario.requires_auth = True
+          - test_case.is_valid = True
+          - test_case.is_valid_default = True
+        """
+        return (
+            db.query(TestCase)
+            .join(TestScenario, TestScenario.id == TestCase.test_scenario_id)
+            .filter(
+                TestCase.page_id           == page_id,
+                TestCase.is_valid          == True,
+                TestCase.is_valid_default  == True,
+                TestScenario.requires_auth == True,
+            )
+            .first()
+        )
+
+    def _detect_auth_requirements(self, db, page_id: int) -> bool:
+        """
+        Scan all scenarios for this page; set requires_auth=True on matching ones.
+        Returns True if at least one scenario requires auth.
+        """
+        scenarios = db.query(TestScenario).filter(
+            TestScenario.page_id == page_id
+        ).all()
+
+        auth_keywords = [
+            "login", "signin", "sign in", "log in", "authenticate",
+            "password", "username", "email", "credential",
+            "register", "signup", "sign up", "account",
+        ]
+        auth_selectors = [
+            "login", "signin", "password", "username", "email",
+            "auth", "credential", "register", "signup",
+        ]
+
+        has_auth = False
+
+        for scenario in scenarios:
+            requires_auth = False
+            title_lower   = (scenario.title or "").lower()
+
+            if any(kw in title_lower for kw in auth_keywords):
+                requires_auth = True
+
+            if not requires_auth and scenario.data:
+                for step in scenario.data.get("steps", []):
+                    if isinstance(step, dict):
+                        if any(kw in step.get("action", "").lower() for kw in auth_keywords):
+                            requires_auth = True
+                        if any(kw in str(step.get("target", "")).lower() for kw in auth_keywords):
+                            requires_auth = True
+
+                if any(kw in scenario.data.get("entry_point", "").lower() for kw in auth_keywords):
+                    requires_auth = True
+
+                if any(kw in str(scenario.data.get("flow_structure", "")).lower() for kw in auth_selectors):
+                    requires_auth = True
+
+            if not requires_auth and scenario.category:
+                if "auth" in scenario.category.lower():
+                    requires_auth = True
+
+            if requires_auth:
+                scenario.requires_auth = True
+                has_auth = True
+                logger.info(
+                    f"[AUTH_DETECT] Scenario '{scenario.title}' "
+                    f"(id={scenario.id}) → requires_auth=True"
+                )
+
+        db.commit()
+        return has_auth
+
+    async def _perform_login_and_discover(self, db, test_case, requested_by: int):
+        """
+        1. Resolve credentials for the login test case.
+        2. Drive Selenium to log in.
+        3. Capture post-auth landing URL.
+        4. Save landing URL on the test case record.
+        5. Emit PAGE_EXTRACT_SINGLE only if the landing URL is new.
+        """
+        page = db.query(Page).filter(Page.id == test_case.page_id).first()
+        if not page:
+            return
+
+        driver         = get_driver()
+        llm            = LLMWrapper()
+        prompt_manager = PromptManager()
+        cred_service   = TestCredentialService(llm=llm, logger=logger)
+
+        try:
+            resolved = cred_service.resolve(page.id, test_case.data.get("test_data", {}))
+
+            username = None
+            password = None
+            for key, value in resolved.items():
+                if "email" in key.lower() or "username" in key.lower():
+                    username = value
+                if "password" in key.lower():
+                    password = value
+
+            if not username or not password:
+                logger.warning("[AUTH] Missing credentials — skipping login")
+                return
+
+            driver.get(page.page_url)
+
+            analyzer = PageAnalysisService(
+                driver=driver, logger=logger, llm=llm, prompt_manager=prompt_manager
+            )
+            success = analyzer.login_to_website(username=username, password=password)
+
+            if not success:
+                logger.warning("[AUTH] Login failed — skipping post-auth discovery")
+                return
+
+            logger.info("[AUTH] Login successful")
+            landing_url = driver.current_url
+
+            # Persist landing URL on the test case
+            if test_case.expected_outcome is None:
+                test_case.expected_outcome = {}
+            test_case.expected_outcome["post_auth_landing_url"] = landing_url
+            db.commit()
+
+            # Only emit extract if the landing URL is genuinely new
+            if db.query(Page).filter(Page.page_url == landing_url).first():
+                logger.info(f"[AUTH] Landing page already known: {landing_url} — skipping")
+                return
+
+            logger.info(f"[AUTH] New post-auth landing page: {landing_url}")
+            await rabbitmq_producer.publish_message(
+                settings.PAGE_EXTRACT_SINGLE_QUEUE,
+                {
+                    "event":        "PAGE_EXTRACT_SINGLE_QUEUE",
+                    "site_id":      page.site_id,
+                    "site_url":     landing_url,
+                    "page_id":      page.id,
+                    "requested_by": requested_by,
+                    "timestamp":    datetime.utcnow().isoformat(),
+                },
+                priority=6,
+            )
+
+        finally:
+            driver.quit()
+
+    # =========================================================================
+    # STEP 1 — PAGE EXTRACT  (full site crawl, pipeline entry point)
+    # =========================================================================
+
     async def process_page_extract(self, body: dict):
         logger.info(f"[PAGE_EXTRACT] Started | payload={body}")
 
-        site_id = body["site_id"]
-        site_url = body["site_url"]
+        site_id      = body["site_id"]
+        site_url     = body["site_url"]
         requested_by = body["requested_by"]
 
         db = SessionLocal()
-
         try:
             site = db.query(Site).filter(Site.id == site_id).first()
-            if not site or site.status == "Pause":
+            if not site or site.status == "Paused":
+                logger.info(f"[PAGE_EXTRACT] Skipped — site paused or not found | site_id={site_id}")
                 return
 
-            site.status = "Processing"
+            site.status     = "Processing"
             site.updated_on = datetime.utcnow()
             site.updated_by = requested_by
             db.commit()
 
-            loop = asyncio.get_running_loop()
-
+            loop   = asyncio.get_running_loop()
             driver = get_driver()
-            extractor = URLExtractor(driver, logger)
 
             try:
                 urls = await loop.run_in_executor(
-                    None, extractor.extract_urls, site_url
+                    None, URLExtractor(driver, logger).extract_urls, site_url
                 )
 
                 base_domain = urlparse(site_url).netloc
@@ -59,8 +377,8 @@ class WorkerService:
                         db.add(Page(
                             site_id=site.id,
                             page_url=url,
-                            status="new",
-                            is_auth_detected=False,  # Default to False, will be detected later
+                            status=PageStatus.NEW,
+                            is_auth_detected=False,
                             created_on=datetime.utcnow(),
                             created_by=requested_by,
                         ))
@@ -69,95 +387,101 @@ class WorkerService:
                     if parsed.netloc != base_domain:
                         if not db.query(SiteAlias).filter(
                             SiteAlias.site_id == site.id,
-                            SiteAlias.site_alias_url == parsed.netloc
+                            SiteAlias.site_alias_url == parsed.netloc,
                         ).first():
-                            db.add(SiteAlias(
-                                site_id=site.id,
-                                site_alias_url=parsed.netloc
-                            ))
+                            db.add(SiteAlias(site_id=site.id, site_alias_url=parsed.netloc))
 
                 db.commit()
 
             finally:
                 driver.quit()
 
-         
-
             logger.info(f"[PAGE_EXTRACT] Completed | site_id={site.id}")
 
-            # Emit PAGE_ANALYSE events PER PAGE
             pages = db.query(Page).filter(
                 Page.site_id == site.id,
-                Page.status == "new"
+                Page.status  == PageStatus.NEW,
             ).all()
 
             for page in pages:
                 await rabbitmq_producer.publish_message(
                     settings.PAGE_ANALYSE_QUEUE,
                     {
-                        "event": "PAGE_ANALYSE",
-                        "page_id": page.id,
+                        "event":        "PAGE_ANALYSE",
+                        "page_id":      page.id,
                         "requested_by": requested_by,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp":    datetime.utcnow().isoformat(),
                     },
-                    priority=5
+                    priority=5,
                 )
 
         finally:
             db.close()
 
-    # ---------------- PAGE ANALYSE ---------------- #
+    # =========================================================================
+    # STEP 2 — PAGE ANALYSE
+    # =========================================================================
+
     async def process_page_analyse(self, body: dict):
         logger.info(f"[PAGE_ANALYSE] Started | payload={body}")
 
-        page_id = body["page_id"]
+        page_id      = body["page_id"]
         requested_by = body["requested_by"]
 
-        db = SessionLocal()
-
+        db   = SessionLocal()
         page = db.query(Page).filter(Page.id == page_id).first()
-        if not page or page.status != "new":
+
+        # Anti-loop guard: only process pages that are truly new
+        if not page or page.status != PageStatus.NEW:
             db.close()
             return
 
-        page.status = "generating_metadata"
+        # ── Pause check ──────────────────────────────────────────────────────
+        if self._is_paused(page.site_id):
+            logger.info(f"[PAGE_ANALYSE] Site paused — holding page_id={page_id}")
+            db.close()
+            return
+
+        self._set_page_status(db, page, PageStatus.GENERATING_METADATA, requested_by)
         db.commit()
+        await self._notify_ws(page, requested_by)
 
-        driver = get_driver()
-        llm = LLMWrapper()
+        driver         = get_driver()
+        llm            = LLMWrapper()
         prompt_manager = PromptManager()
-
-        analyzer = PageAnalysisService(
-            driver=driver,
-            logger=logger,
-            llm=llm,
-            prompt_manager=prompt_manager
-        )
-
-        loop = asyncio.get_running_loop()
+        loop           = asyncio.get_running_loop()
 
         try:
             await loop.run_in_executor(
                 None,
-                analyzer.analyze_page,
+                PageAnalysisService(
+                    driver=driver, logger=logger, llm=llm, prompt_manager=prompt_manager
+                ).analyze_page,
                 page.id,
                 page.page_url,
-                requested_by
+                requested_by,
             )
+
+            # ── Pause check after heavy work ─────────────────────────────────
+            if self._is_paused(page.site_id):
+                logger.info(f"[PAGE_ANALYSE] Site paused after analysis — page_id={page_id}")
+                db.close()
+                return
 
             await rabbitmq_producer.publish_message(
                 settings.TEST_SCENARIO_QUEUE,
                 {
-                    "event": "TEST_SCENARIO_GENERATE",
-                    "page_id": page.id,
+                    "event":        "TEST_SCENARIO_QUEUE",
+                    "page_id":      page.id,
                     "requested_by": requested_by,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp":    datetime.utcnow().isoformat(),
                 },
-                priority=5
+                priority=5,
             )
 
         except Exception:
-            page.status = "new"
+            # Roll back to "new" so resume can retry
+            self._set_page_status(db, page, PageStatus.NEW, requested_by)
             db.commit()
             raise
 
@@ -165,91 +489,153 @@ class WorkerService:
             driver.quit()
             db.close()
 
-    # ---------------- TEST SCENARIO GENERATION ---------------- #
+    # =========================================================================
+    # STEP 3 — TEST SCENARIO GENERATE
+    # =========================================================================
+
     async def process_test_scenario(self, body: dict):
         logger.info(f"[TEST_SCENARIO] Started | payload={body}")
-        page_id = body["page_id"]
+
+        page_id      = body["page_id"]
         requested_by = body["requested_by"]
 
         db = SessionLocal()
-
         try:
-            llm = LLMWrapper()
-            prompt_manager = PromptManager()
-            service = TestScenarioService(
-                llm=llm,
-                prompt_manager=prompt_manager,
-                logger=logger
-            )
+            page = db.query(Page).filter(Page.id == page_id).first()
+            if not page:
+                return
+
+            # ── Pause check ──────────────────────────────────────────────────
+            if self._is_paused(page.site_id):
+                logger.info(f"[TEST_SCENARIO] Site paused — holding page_id={page_id}")
+                return
+
+            self._set_page_status(db, page, PageStatus.GENERATING_TEST_SCENARIOS, requested_by)
+            db.commit()
+            await self._notify_ws(page, requested_by)
 
             loop = asyncio.get_running_loop()
-
             await loop.run_in_executor(
                 None,
-                service.generate,
+                TestScenarioService(
+                    llm=LLMWrapper(), prompt_manager=PromptManager(), logger=logger
+                ).generate,
                 page_id,
-                requested_by
+                requested_by,
             )
 
-            # Check if any scenarios require authentication
+            # ── Pause check after heavy work ─────────────────────────────────
+            if self._is_paused(page.site_id):
+                logger.info(f"[TEST_SCENARIO] Site paused after generation — page_id={page_id}")
+                # Page status stays "generating_test_scenarios" so resume
+                # knows to re-emit TEST_SCENARIO_GENERATE
+                return
+
+            # Detect auth requirements and tag scenarios + page
             auth_required = self._detect_auth_requirements(db, page_id)
-            
             if auth_required:
-                # Update page to mark it as requiring auth
                 page = db.query(Page).filter(Page.id == page_id).first()
                 if page:
-                    page.auth_required = True
-                    page.updated_on = datetime.utcnow()
-                    page.updated_by = requested_by
+                    page.is_auth_detected = True
+                    page.updated_on       = datetime.utcnow()
+                    page.updated_by       = requested_by
                     db.commit()
-                    logger.info(f"[TEST_SCENARIO] Page {page_id} marked as auth_required=True")
+                    logger.info(f"[TEST_SCENARIO] Page {page_id} → is_auth_detected=True")
 
             await rabbitmq_producer.publish_message(
                 settings.TEST_CASE_QUEUE,
                 {
-                    "event": "TEST_CASE_GENERATE",
-                    "page_id": page_id,
+                    "event":        "TEST_CASE_QUEUE",
+                    "page_id":      page_id,
                     "requested_by": requested_by,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp":    datetime.utcnow().isoformat(),
                 },
-                priority=5
+                priority=5,
             )
+
             logger.info(f"[TEST_SCENARIO] Completed | page_id={page_id}")
 
-        except Exception as e:
+        except Exception:
             logger.exception("[TEST_SCENARIO] Failed")
             raise
 
         finally:
             db.close()
 
-    # ---------------- TEST CASE GENERATION ---------------- #
+    # =========================================================================
+    # STEP 4 — TEST CASE GENERATE
+    # =========================================================================
+
     async def process_test_case(self, body: dict):
         logger.info(f"[TEST_CASE] Started | payload={body}")
-        page_id = body["page_id"]
+
+        page_id      = body["page_id"]
         requested_by = body["requested_by"]
-        
-        llm = LLMWrapper()
-        prompt_manager = PromptManager()
-        service = TestCaseService(
-            llm=llm,
-            prompt_manager=prompt_manager,
-            logger=logger
-        )
+        # Optional: scenario_id present only on targeted re-run
+        scenario_id  = body.get("scenario_id")
 
-        loop = asyncio.get_running_loop()
-
+        db = SessionLocal()
         try:
-            await loop.run_in_executor(
-                None,
-                service.generate,
-                page_id,
-                requested_by
-            )
+            page = db.query(Page).filter(Page.id == page_id).first()
+            if not page:
+                return
 
-            
-            # After test case generation, check for new pages discovered during auth flows
-            await self._process_post_auth_pages(page_id, requested_by)
+            # ── Pause check ──────────────────────────────────────────────────
+            if self._is_paused(page.site_id):
+                logger.info(f"[TEST_CASE] Site paused — holding page_id={page_id}")
+                return
+
+            self._set_page_status(db, page, PageStatus.GENERATING_TEST_CASES, requested_by)
+            db.commit()
+            await self._notify_ws(page, requested_by)
+
+            loop = asyncio.get_running_loop()
+
+            if scenario_id:
+                # ── Targeted re-run: single scenario only ─────────────────
+                logger.info(f"[TEST_CASE] Targeted re-run | scenario_id={scenario_id}")
+                await loop.run_in_executor(
+                    None,
+                    TestCaseService(
+                        llm=LLMWrapper(), prompt_manager=PromptManager(), logger=logger
+                    ).generate_for_scenario,
+                    page_id,
+                    scenario_id,
+                    requested_by,
+                )
+            else:
+                # ── Normal full-page generation ───────────────────────────
+                await loop.run_in_executor(
+                    None,
+                    TestCaseService(
+                        llm=LLMWrapper(), prompt_manager=PromptManager(), logger=logger
+                    ).generate,
+                    page_id,
+                    requested_by,
+                )
+
+            # ── Pause check after heavy work ─────────────────────────────────
+            if self._is_paused(page.site_id):
+                logger.info(f"[TEST_CASE] Site paused after generation — page_id={page_id}")
+                return
+
+            # Auth check + login + post-auth page discovery
+            login_test_case = self._get_login_test_case(db, page_id)
+            if login_test_case:
+                logger.info(f"[AUTH] Login test case detected | page_id={page_id}")
+                await self._perform_login_and_discover(db, login_test_case, requested_by)
+
+            await rabbitmq_producer.publish_message(
+                settings.TEST_SCRIPT_QUEUE,
+                {
+                    "event":        "TEST_SCRIPT_QUEUE",
+                    "page_id":      page_id,
+                    "scenario_id":  scenario_id,   # None on full run, int on re-run
+                    "requested_by": requested_by,
+                    "timestamp":    datetime.utcnow().isoformat(),
+                },
+                priority=5,
+            )
 
             logger.info(f"[TEST_CASE] Completed | page_id={page_id}")
 
@@ -257,247 +643,459 @@ class WorkerService:
             logger.exception("[TEST_CASE] Failed")
             raise
 
-    # ---------------- AUTH DETECTION ---------------- #
-    def _detect_auth_requirements(self, db, page_id: int) -> bool:
-        """
-        Detect if any test scenarios for this page require authentication.
-        Updates the requires_auth flag on individual scenarios.
-        Returns True if at least one scenario requires auth.
-        """
-        scenarios = db.query(TestScenario).filter(
-            TestScenario.page_id == page_id
-        ).all()
-        
-        auth_keywords = [
-            'login', 'signin', 'sign in', 'log in', 'authenticate',
-            'password', 'username', 'email', 'credential',
-            'register', 'signup', 'sign up', 'account'
-        ]
-        
-        auth_selectors = [
-            'login', 'signin', 'password', 'username', 'email',
-            'auth', 'credential', 'register', 'signup'
-        ]
-        
-        has_auth_scenario = False
-        
-        for scenario in scenarios:
-            requires_auth = False
-            
-            # Check title
-            title_lower = scenario.title.lower() if scenario.title else ""
-            if any(keyword in title_lower for keyword in auth_keywords):
-                requires_auth = True
-            
-            # Check scenario data
-            if scenario.data:
-                data_str = str(scenario.data).lower()
-                
-                # Check for auth-related actions in steps
-                if 'steps' in scenario.data:
-                    for step in scenario.data['steps']:
-                        if isinstance(step, dict):
-                            action = step.get('action', '').lower()
-                            target = str(step.get('target', '')).lower()
-                            
-                            # Check if action or target contains auth keywords
-                            if any(keyword in action for keyword in auth_keywords):
-                                requires_auth = True
-                            if any(keyword in target for keyword in auth_keywords):
-                                requires_auth = True
-                
-                # Check for auth-related URLs
-                if 'entry_point' in scenario.data:
-                    entry_point = scenario.data['entry_point'].lower()
-                    if any(keyword in entry_point for keyword in auth_keywords):
-                        requires_auth = True
-                
-                # Check flow structure for auth patterns
-                if 'flow_structure' in scenario.data:
-                    flow_str = str(scenario.data['flow_structure']).lower()
-                    if any(keyword in flow_str for keyword in auth_selectors):
-                        requires_auth = True
-                
-                # Check category
-                if scenario.category and 'auth' in scenario.category.lower():
-                    requires_auth = True
-            
-            # Update the scenario's requires_auth flag
-            if requires_auth:
-                scenario.requires_auth = True
-                has_auth_scenario = True
-                logger.info(f"[AUTH_DETECT] Scenario '{scenario.title}' (ID: {scenario.id}) requires authentication")
-            
-        db.commit()
-        
-        return has_auth_scenario
-    
-    # ---------------- POST-AUTH PAGE DISCOVERY ---------------- #
-    async def _process_post_auth_pages(self, page_id: int, requested_by: int):
-        """
-        Check if test cases for this page discovered new pages during auth flows.
-        Extract and analyze any new pages found.
-        """
-        db = SessionLocal()
-        
-        try:
-            page = db.query(Page).filter(Page.id == page_id).first()
-            if not page or not page.auth_required:
-                return
-            
-            # Get all test cases for this page
-            from shared_orm.models.test_case import TestCase
-            test_cases = db.query(TestCase).filter(
-                TestCase.page_id == page_id
-            ).all()
-            
-            discovered_urls = set()
-            
-            # Extract post-auth landing pages from test cases
-            for test_case in test_cases:
-                if test_case.data and 'post_auth_landing_url' in test_case.data:
-                    landing_url = test_case.data['post_auth_landing_url']
-                    discovered_urls.add(landing_url)
-                
-                # Also check expected_outcome for redirect URLs
-                if test_case.expected_outcome and 'redirect_url' in test_case.expected_outcome:
-                    redirect_url = test_case.expected_outcome['redirect_url']
-                    discovered_urls.add(redirect_url)
-            
-            # Process each discovered URL
-            for url in discovered_urls:
-                await self._handle_discovered_page(db, url, page.site_id, requested_by)
-            
         finally:
             db.close()
 
-    # ---------------- HANDLE DISCOVERED PAGE ---------------- #
-    async def _handle_discovered_page(self, db, url: str, site_id: int, requested_by: int):
-        """
-        Handle a newly discovered page from post-auth flow.
-        Checks if it exists, if not, triggers full extraction and analysis.
-        """
-        # Check if page already exists
-        existing_page = db.query(Page).filter(Page.page_url == url).first()
-        
-        if existing_page:
-            logger.info(f"[DISCOVERED_PAGE] Page already exists: {url}")
-            return
-        
-        logger.info(f"[DISCOVERED_PAGE] New page discovered: {url}, triggering extraction")
-        
-        # Create new page entry
-        new_page = Page(
-            site_id=site_id,
-            page_url=url,
-            status="new",
-            auth_required=False,
-            created_on=datetime.utcnow(),
-            created_by=requested_by,
-        )
-        db.add(new_page)
+    # =========================================================================
+    # STEP 5 — TEST SCRIPT GENERATE
+    # =========================================================================
+
+    async def process_test_script(self, body: dict):
+        logger.info(f"[TEST_SCRIPT] Started | payload={body}")
+
+        page_id      = body["page_id"]
+        requested_by = body["requested_by"]
+        scenario_id  = body.get("scenario_id")   # None = all scenarios, int = targeted
+
+        db = SessionLocal()
+        try:
+            page = db.query(Page).filter(Page.id == page_id).first()
+            if not page:
+                logger.warning(f"[TEST_SCRIPT] Page {page_id} not found — skipping")
+                return
+
+            # ── Pause check ──────────────────────────────────────────────────
+            if self._is_paused(page.site_id):
+                logger.info(f"[TEST_SCRIPT] Site paused — holding page_id={page_id}")
+                return
+
+            self._set_page_status(db, page, PageStatus.GENERATING_TEST_SCRIPTS, requested_by)
+            db.commit()
+            await self._notify_ws(page, requested_by)
+
+            # Guard — need at least one scenario
+            scenario_q = db.query(TestScenario).filter(TestScenario.page_id == page_id)
+            if scenario_id:
+                scenario_q = scenario_q.filter(TestScenario.id == scenario_id)
+
+            if scenario_q.count() == 0:
+                logger.warning(f"[TEST_SCRIPT] No scenarios found | page_id={page_id} — skipping")
+                await self._finalize_page(db, page, requested_by)
+                return
+
+            # Resolve login credentials if auth was detected
+            require_login = page.is_auth_detected
+            username      = None
+            password      = None
+
+            if require_login:
+                auth_tc = self._get_login_test_case(db, page_id)
+                if auth_tc:
+                    resolved = TestCredentialService(llm=LLMWrapper(), logger=logger).resolve(
+                        page_id, auth_tc.data.get("test_data", {})
+                    )
+                    for key, value in resolved.items():
+                        if "email" in key.lower() or "username" in key.lower():
+                            username = value
+                        if "password" in key.lower():
+                            password = value
+
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                TestScriptService(
+                    llm=LLMWrapper(), prompt_manager=PromptManager(), logger=logger
+                ).generate_scripts_for_page,
+                page,
+                require_login,
+                username,
+                password,
+                requested_by,
+                scenario_id,   # None = all, int = targeted
+            )
+
+            # ── Pause check after heavy work ─────────────────────────────────
+            if self._is_paused(page.site_id):
+                logger.info(f"[TEST_SCRIPT] Site paused after generation — page_id={page_id}")
+                return
+
+            await self._finalize_page(db, page, requested_by)
+
+            logger.info(f"[TEST_SCRIPT] Completed | page_id={page_id}")
+
+        except Exception:
+            logger.exception("[TEST_SCRIPT] Failed")
+            raise
+
+        finally:
+            db.close()
+
+    async def _finalize_page(self, db, page: Page, requested_by: int):
+        """Mark page as done, notify WS, emit TEST_EXECUTION."""
+        self._set_page_status(db, page, PageStatus.DONE, requested_by)
         db.commit()
-        db.refresh(new_page)
-        
-        # Trigger PAGE_EXTRACT for this specific URL
-        # This will extract all links from the post-auth landing page
+        await self._notify_ws(page, requested_by)
+
         await rabbitmq_producer.publish_message(
-            settings.PAGE_EXTRACT_QUEUE,
+            settings.TEST_EXECUTION_QUEUE,
             {
-                "event": "PAGE_EXTRACT_SINGLE",
-                "site_id": site_id,
-                "site_url": url,
-                "page_id": new_page.id,
+                "event":        "TEST_EXECUTION_QUEUE",
+                "page_id":      page.id,
                 "requested_by": requested_by,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp":    datetime.utcnow().isoformat(),
             },
-            priority=6  # Higher priority for post-auth pages
+            priority=5,
         )
 
-    # ---------------- SINGLE PAGE EXTRACTION ---------------- #
+    # =========================================================================
+    # STEP 6 — TEST EXECUTION (blank — future)
+    # =========================================================================
+
+    async def process_test_execution(self, body: dict):
+        logger.info(f"[TEST_EXECUTION] Received | payload={body}")
+        # TODO: implement test execution logic
+        pass
+
+    # =========================================================================
+    # STEP 2b — PAGE EXTRACT SINGLE  (post-auth page discovery only)
+    # =========================================================================
+
     async def process_page_extract_single(self, body: dict):
         """
-        Extract URLs from a single page (used for post-auth discovered pages).
-        This is different from full site extraction.
+        Extract URLs from a single post-auth landing page.
+        Only inserts URLs not already in the Page table (anti-loop guarantee).
+        Emits PAGE_ANALYSE only for the newly inserted pages.
         """
         logger.info(f"[PAGE_EXTRACT_SINGLE] Started | payload={body}")
 
-        site_id = body["site_id"]
-        site_url = body["site_url"]
-        page_id = body["page_id"]
+        site_id      = body["site_id"]
+        site_url     = body["site_url"]
+        page_id      = body["page_id"]   # originating page (for logging)
         requested_by = body["requested_by"]
 
         db = SessionLocal()
-
         try:
-            loop = asyncio.get_running_loop()
+            # ── Pause check ──────────────────────────────────────────────────
+            if self._is_paused(site_id):
+                logger.info(f"[PAGE_EXTRACT_SINGLE] Site paused — holding | site_id={site_id}")
+                return
+
+            site = db.query(Site).filter(Site.id == site_id).first()
+            if not site:
+                logger.warning(f"[PAGE_EXTRACT_SINGLE] Site {site_id} not found — skipping")
+                return
+
+            loop   = asyncio.get_running_loop()
             driver = get_driver()
-            extractor = URLExtractor(driver, logger)
 
             try:
-                # Extract URLs from this specific page
                 urls = await loop.run_in_executor(
-                    None, extractor.extract_urls, site_url
+                    None, URLExtractor(driver, logger).extract_urls, site_url
                 )
 
                 base_domain = urlparse(site_url).netloc
-                site = db.query(Site).filter(Site.id == site_id).first()
+                new_pages   = []
 
-                if not site:
-                    logger.warning(f"Site {site_id} not found")
-                    return
-
-                # Add newly discovered pages
                 for url in urls:
-                    # Check if page already exists
+                    # Strict deduplication — DB is source of truth
                     if not db.query(Page).filter(Page.page_url == url).first():
-                        db.add(Page(
+                        new_page = Page(
                             site_id=site.id,
                             page_url=url,
-                            status="new",
-                            auth_required=False,
+                            status=PageStatus.NEW,
+                            is_auth_detected=False,
                             created_on=datetime.utcnow(),
                             created_by=requested_by,
-                        ))
+                        )
+                        db.add(new_page)
+                        new_pages.append(new_page)
 
-                    # Handle site aliases
                     parsed = urlparse(url)
                     if parsed.netloc != base_domain:
                         if not db.query(SiteAlias).filter(
                             SiteAlias.site_id == site.id,
-                            SiteAlias.site_alias_url == parsed.netloc
+                            SiteAlias.site_alias_url == parsed.netloc,
                         ).first():
-                            db.add(SiteAlias(
-                                site_id=site.id,
-                                site_alias_url=parsed.netloc
-                            ))
+                            db.add(SiteAlias(site_id=site.id, site_alias_url=parsed.netloc))
 
                 db.commit()
+                for np in new_pages:
+                    db.refresh(np)
 
             finally:
                 driver.quit()
 
-            logger.info(f"[PAGE_EXTRACT_SINGLE] Completed | page_id={page_id}")
+            logger.info(
+                f"[PAGE_EXTRACT_SINGLE] Done | origin_page_id={page_id} "
+                f"new_pages={len(new_pages)}"
+            )
 
-            # Now analyze the original page and all newly discovered pages
-            pages_to_analyze = db.query(Page).filter(
-                Page.site_id == site_id,
-                Page.status == "new"
-            ).all()
-
-            for page in pages_to_analyze:
+            # Emit PAGE_ANALYSE only for brand-new pages
+            for new_page in new_pages:
                 await rabbitmq_producer.publish_message(
                     settings.PAGE_ANALYSE_QUEUE,
                     {
-                        "event": "PAGE_ANALYSE",
-                        "page_id": page.id,
+                        "event":        "PAGE_ANALYSE",
+                        "page_id":      new_page.id,
                         "requested_by": requested_by,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp":    datetime.utcnow().isoformat(),
                     },
-                    priority=6  # Higher priority for post-auth pages
+                    priority=6,
                 )
 
         finally:
             db.close()
-                
+
+    # =========================================================================
+    # PAUSE / RESUME
+    # =========================================================================
+
+    async def process_resume(self, body: dict):
+        """
+        Called when the user clicks Resume.
+        API must set site.status = "Processing" BEFORE publishing this event.
+
+        Scans every page for the site that is not yet "done" and re-emits
+        the correct queue message based on its current status.
+        """
+        logger.info(f"[RESUME] Started | payload={body}")
+
+        site_id      = body["site_id"]
+        requested_by = body["requested_by"]
+
+        db = SessionLocal()
+        try:
+            site = db.query(Site).filter(Site.id == site_id).first()
+            if not site:
+                logger.warning(f"[RESUME] Site {site_id} not found")
+                return
+
+            if site.status == "Paused":
+                logger.warning(
+                    f"[RESUME] Site {site_id} is still Paused — "
+                    "API should set status=Processing before publishing RESUME"
+                )
+                return
+
+            # All pages that are not yet done
+            pages = db.query(Page).filter(
+                Page.site_id != None,
+                Page.site_id == site_id,
+                Page.status  != PageStatus.DONE,
+            ).all()
+
+            resumed = 0
+            for page in pages:
+                entry = _RESUME_MAP.get(page.status)
+                if not entry:
+                    # Unknown or done status — skip
+                    continue
+
+                queue, event, priority = entry
+                await rabbitmq_producer.publish_message(
+                    queue,
+                    {
+                        "event":        event,
+                        "page_id":      page.id,
+                        "requested_by": requested_by,
+                        "timestamp":    datetime.utcnow().isoformat(),
+                    },
+                    priority=priority,
+                )
+                resumed += 1
+                logger.info(
+                    f"[RESUME] Re-queued | page_id={page.id} "
+                    f"status='{page.status}' → event={event}"
+                )
+
+            logger.info(f"[RESUME] Completed | site_id={site_id} pages_resumed={resumed}")
+
+        finally:
+            db.close()
+
+    # =========================================================================
+    # AUTH CREDENTIAL UPDATE  (standalone entry point from frontend)
+    # =========================================================================
+
+    async def process_auth_credential_update(self, body: dict):
+        """
+        Triggered when the user updates login credentials in the frontend.
+        Scope: re-run login only + crawl any newly discovered post-auth pages.
+
+        Flow:
+          1. Resolve new credentials from TestCredentialService.
+          2. Find the site's login page (is_auth_detected=True).
+          3. Drive Selenium to log in with the new credentials.
+          4. Emit PAGE_EXTRACT_SINGLE for the landing URL if it's new.
+             New pages flow independently through the full pipeline.
+        """
+        logger.info(f"[AUTH_UPDATE] Started | payload={body}")
+
+        site_id      = body["site_id"]
+        requested_by = body["requested_by"]
+        # Caller may pass pre-resolved credentials directly
+        new_username = body.get("username")
+        new_password = body.get("password")
+
+        db = SessionLocal()
+        try:
+            # ── Pause check ──────────────────────────────────────────────────
+            if self._is_paused(site_id):
+                logger.info(f"[AUTH_UPDATE] Site paused — skipping | site_id={site_id}")
+                return
+
+            # Find a page for this site that has auth detected
+            auth_page = db.query(Page).filter(
+                Page.site_id         == site_id,
+                Page.is_auth_detected == True,
+            ).first()
+
+            if not auth_page:
+                logger.warning(
+                    f"[AUTH_UPDATE] No auth-detected page found for site {site_id}"
+                )
+                return
+
+            # Resolve credentials — prefer directly passed values,
+            # fall back to credential service lookup
+            if not new_username or not new_password:
+                auth_tc = self._get_login_test_case(db, auth_page.id)
+                if not auth_tc:
+                    logger.warning(
+                        f"[AUTH_UPDATE] No login test case for page {auth_page.id}"
+                    )
+                    return
+
+                resolved = TestCredentialService(
+                    llm=LLMWrapper(), logger=logger
+                ).resolve(auth_page.id, auth_tc.data.get("test_data", {}))
+
+                for key, value in resolved.items():
+                    if "email" in key.lower() or "username" in key.lower():
+                        new_username = value
+                    if "password" in key.lower():
+                        new_password = value
+
+            if not new_username or not new_password:
+                logger.warning("[AUTH_UPDATE] Could not resolve credentials — aborting")
+                return
+
+            # Drive Selenium login with new credentials
+            driver         = get_driver()
+            llm            = LLMWrapper()
+            prompt_manager = PromptManager()
+
+            try:
+                driver.get(auth_page.page_url)
+
+                analyzer = PageAnalysisService(
+                    driver=driver, logger=logger, llm=llm, prompt_manager=prompt_manager
+                )
+                success = analyzer.login_to_website(
+                    username=new_username, password=new_password
+                )
+
+                if not success:
+                    logger.warning("[AUTH_UPDATE] Login failed with new credentials")
+                    return
+
+                logger.info("[AUTH_UPDATE] Login successful with new credentials")
+                landing_url = driver.current_url
+
+                # Only extract if the landing URL is new
+                if db.query(Page).filter(Page.page_url == landing_url).first():
+                    logger.info(
+                        f"[AUTH_UPDATE] Landing page already known: {landing_url} — done"
+                    )
+                    return
+
+                logger.info(f"[AUTH_UPDATE] New landing page: {landing_url} — triggering extract")
+                await rabbitmq_producer.publish_message(
+                    settings.PAGE_EXTRACT_SINGLE_QUEUE,
+                    {
+                        "event":        "PAGE_EXTRACT_SINGLE_QUEUE",
+                        "site_id":      site_id,
+                        "site_url":     landing_url,
+                        "page_id":      auth_page.id,
+                        "requested_by": requested_by,
+                        "timestamp":    datetime.utcnow().isoformat(),
+                    },
+                    priority=6,
+                )
+
+            finally:
+                driver.quit()
+
+            logger.info(f"[AUTH_UPDATE] Completed | site_id={site_id}")
+
+        finally:
+            db.close()
+
+    # =========================================================================
+    # SCENARIO RE-RUN  (targeted single-scenario re-run from frontend)
+    # =========================================================================
+
+    async def process_scenario_rerun(self, body: dict):
+        """
+        Triggered when the user clicks "Run Again" on a specific scenario
+        in the frontend.
+
+        Sets page.status = "generating_test_cases" and emits
+        TEST_CASE_QUEUE with scenario_id so only that scenario's
+        test cases and script are regenerated.
+        """
+        logger.info(f"[SCENARIO_RERUN] Started | payload={body}")
+
+        scenario_id  = body["scenario_id"]
+        requested_by = body["requested_by"]
+
+        db = SessionLocal()
+        try:
+            scenario = db.query(TestScenario).filter(
+                TestScenario.id == scenario_id
+            ).first()
+
+            if not scenario:
+                logger.warning(f"[SCENARIO_RERUN] Scenario {scenario_id} not found")
+                return
+
+            page = db.query(Page).filter(Page.id == scenario.page_id).first()
+            if not page:
+                logger.warning(f"[SCENARIO_RERUN] Page {scenario.page_id} not found")
+                return
+
+            # ── Pause check ──────────────────────────────────────────────────
+            if self._is_paused(page.site_id):
+                logger.info(
+                    f"[SCENARIO_RERUN] Site paused — skipping | site_id={page.site_id}"
+                )
+                return
+
+            # Reset page status so the pipeline re-enters correctly
+            self._set_page_status(db, page, PageStatus.GENERATING_TEST_CASES, requested_by)
+            db.commit()
+            await self._notify_ws(page, requested_by)
+
+            # Emit targeted TEST_CASE_QUEUE (scenario_id carried through)
+            await rabbitmq_producer.publish_message(
+                settings.TEST_CASE_QUEUE,
+                {
+                    "event":        "TEST_CASE_QUEUE",
+                    "page_id":      page.id,
+                    "scenario_id":  scenario_id,
+                    "requested_by": requested_by,
+                    "timestamp":    datetime.utcnow().isoformat(),
+                },
+                priority=7,   # Higher priority — user-initiated
+            )
+
+            logger.info(
+                f"[SCENARIO_RERUN] Queued | "
+                f"scenario_id={scenario_id} page_id={page.id}"
+            )
+
+        finally:
+            db.close()
+
+
 worker_service = WorkerService()

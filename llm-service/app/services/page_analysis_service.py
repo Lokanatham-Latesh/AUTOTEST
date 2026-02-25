@@ -7,8 +7,13 @@ from shared_orm.models.page import Page
 from app.extractor.navigation_extractor import NavigationExtractor
 from shared_orm.models.page_link import PageLink
 from selenium.webdriver.common.by import By
-
-
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import (
+    TimeoutException,
+    NoSuchElementException,
+    ElementClickInterceptedException
+)
 
 class PageAnalysisService:
 
@@ -240,6 +245,7 @@ class PageAnalysisService:
         except Exception as e:
             self.logger.error(f"LLM page analysis failed: {str(e)}")
             return {}
+   
     def extract_forms(self):
         """Extract form information from current page"""
         forms = []
@@ -278,6 +284,7 @@ class PageAnalysisService:
             "type": el.get_attribute('type')
         } for el in self.driver.find_elements(By.CSS_SELECTOR, 
                                             'button, a, input, select, textarea')]
+   
     def extract_data_tables(self):
         """Extract table information from current page"""
         return [{
@@ -294,3 +301,195 @@ class PageAnalysisService:
             "primary_actions": [btn.text for btn in
                               self.driver.find_elements(By.CSS_SELECTOR, '.primary-btn, .cta-button')]
         }
+
+    # -----------------------------------------------------------------------
+    # AUTHENTICATION HANDLER
+    # This method attempts to log in to the website using provided credentials.
+    # It uses LLM to identify the login form fields and submit button.
+    # Returns True if login is successful, False otherwise.
+    # -----------------------------------------------------------------------
+    # def login_to_website(self, url, username=None, password=None):
+    #     if not username or not password:
+    #         raise ValueError("Credentials required")
+
+    #     try:
+    #         self.logger.info("Starting authentication")
+
+    #         self.driver.get(url)
+
+    #         WebDriverWait(self.driver, 10).until(
+    #             EC.presence_of_element_located((By.TAG_NAME, "body"))
+    #         )
+
+    #         page_html = self.driver.page_source
+
+    #         system_prompt = self.prompt_manager.get_prompt("auth_form_selectors", "system")
+    #         user_prompt = self.prompt_manager.get_prompt("auth_form_selectors", "user").format(
+    #             page_html=page_html
+    #         )
+
+    #         result = self.llm.generate(system_prompt, user_prompt, model_type="analysis")
+
+    #         json_str = result
+    #         if "```json" in result:
+    #             json_str = result.split("```json")[1].split("```")[0].strip()
+    #         elif "```" in result:
+    #             json_str = result.split("```")[1].strip()
+
+    #         auth_data = json.loads(json_str)
+
+    #         username_selector = auth_data.get("username_selector")
+    #         password_selector = auth_data.get("password_selector")
+    #         submit_selector   = auth_data.get("submit_selector")
+
+    #         if not username_selector or not password_selector or not submit_selector:
+    #             raise RuntimeError("Invalid auth selector structure")
+
+    #         # Fill username
+    #         user_field = self.driver.find_element(By.CSS_SELECTOR, username_selector)
+    #         user_field.clear()
+    #         user_field.send_keys(username)
+
+    #         # Fill password
+    #         pass_field = self.driver.find_element(By.CSS_SELECTOR, password_selector)
+    #         pass_field.clear()
+    #         pass_field.send_keys(password)
+
+    #         # Submit
+    #         submit_button = self.driver.find_element(By.CSS_SELECTOR, submit_selector)
+    #         self.driver.execute_script("arguments[0].click();", submit_button)
+
+    #         # Wait for redirect or load
+    #         WebDriverWait(self.driver, 10).until(
+    #             lambda d: d.execute_script("return document.readyState") == "complete"
+    #         )
+
+    #         # Validate login success
+    #         if self.driver.current_url == url:
+    #             self.logger.warning("Login did not redirect.")
+    #             return False
+
+    #         if "logout" in self.driver.page_source.lower():
+    #             self.logger.info("Logout detected — login success.")
+    #             return True
+
+    #         return True
+
+    #     except Exception as e:
+    #         self.logger.error(f"Authentication failed: {str(e)}")
+    #         return False
+
+        
+    def login_to_website(self, username: str, password: str) -> bool:
+        """
+        Perform dynamic login using LLM-discovered selectors.
+        Designed for async worker flow (no interactive input).
+        """
+
+        if not username or not password:
+            raise ValueError("Credentials required for authentication")
+
+        try:
+            self.logger.debug("[AUTH] Authentication started")
+
+            wait = WebDriverWait(self.driver, 15)
+
+            # Ensure page is loaded
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+            page_html = self.driver.page_source
+
+            # ---- Ask LLM for form selectors ----
+            system_prompt = self.prompt_manager.get_prompt(
+                "auth_form_selectors", "system"
+            )
+            user_prompt = self.prompt_manager.get_prompt(
+                "auth_form_selectors", "user"
+            ).format(page_html=page_html)
+
+            result = self.llm.generate(system_prompt, user_prompt, model_type="analysis")
+
+            try:
+                json_str = result.strip()
+
+                if "```json" in json_str:
+                    json_str = json_str.split("```json")[1].split("```")[0].strip()
+                elif "```" in json_str:
+                    json_str = json_str.split("```")[1].strip()
+
+                auth_data = json.loads(json_str)
+
+            except Exception as e:
+                self.logger.error(f"[AUTH] Failed parsing selector JSON: {e}")
+                return False
+
+            self.logger.debug(f"[AUTH] Selectors resolved: {auth_data}")
+
+            # ---- Wait for form fields ----
+            username_selector = auth_data.get("username_selector")
+            password_selector = auth_data.get("password_selector")
+            submit_selector = auth_data.get("submit_selector")
+
+            if not username_selector or not password_selector or not submit_selector:
+                self.logger.error("[AUTH] Missing required selectors from LLM")
+                return False
+
+            username_field = wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, username_selector))
+            )
+            password_field = wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, password_selector))
+            )
+
+            # Clear existing values (important for re-runs)
+            username_field.clear()
+            password_field.clear()
+
+            username_field.send_keys(username)
+            password_field.send_keys(password)
+
+            # ---- Click submit ----
+            submit_button = wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, submit_selector))
+            )
+
+            try:
+                submit_button.click()
+            except ElementClickInterceptedException:
+                self.logger.debug("[AUTH] Click intercepted, using JS click")
+                self.driver.execute_script("arguments[0].click();", submit_button)
+
+            # ---- Wait for redirect or DOM change ----
+            wait.until(lambda d: d.current_url != self.driver.current_url)
+
+            # Small additional stabilization wait
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+            page_html_after = self.driver.page_source
+
+            # ---- First try deterministic check ----
+            if "logout" in page_html_after.lower():
+                self.logger.info("[AUTH] Login detected via logout presence")
+                return True
+
+            # ---- Fallback to LLM login state check ----
+            is_logged = self.llm_is_logged_in(page_html_after)
+
+            if not is_logged:
+                self.logger.warning("[AUTH] LLM indicates login failed")
+                return False
+
+            self.logger.info("[AUTH] Login successful")
+            return True
+
+        except TimeoutException:
+            self.logger.error("[AUTH] Timeout during authentication")
+            return False
+
+        except NoSuchElementException as e:
+            self.logger.error(f"[AUTH] Element not found: {e}")
+            return False
+
+        except Exception as e:
+            self.logger.error(f"[AUTH] Unexpected authentication error: {e}")
+            return False
