@@ -11,12 +11,15 @@ from shared_orm.models.test_scenario import TestScenario
 from shared_orm.models.page_link import PageLink
 from app.schemas.page_schema import PageInfoResponse
 from app.config.logger import logger
+from app.config.setting import settings
+import asyncio
+from app.messaging.rabbitmq_producer import rabbitmq_producer
 
 
 class PageService:
 
 
-    def create_page(
+    async def create_page(
     self,
     page_title: str | None,
     page_url: str,
@@ -46,6 +49,24 @@ class PageService:
         db.commit()
         db.refresh(new_page)
         logger.info(f"[CREATE_PAGE_SUCCESS] PageID={new_page.id}")
+        message = {
+        "event": "PAGE_EXTRACT_SINGLE",
+        "site_id": new_page.site_id, 
+        "extract_url": new_page.page_url,
+        "page_id": new_page.id,
+        "requested_by": user.id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+        asyncio.create_task(
+        rabbitmq_producer.publish_message(
+            queue_name=settings.PAGE_EXTRACT_SINGLE_QUEUE,
+            message=message,
+            priority=5,
+        )
+    )
+        logger.info(
+        f"[PAGE_EXTRACT_SINGLE_PUBLISHED] PageID={new_page.id} Queue={settings.PAGE_EXTRACT_SINGLE_QUEUE}"
+    )
         return new_page
     
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Pagination } from '@/components/common/Pagination'
@@ -9,6 +9,8 @@ import { useCreatePageMutation, useUnlinkedPagesQuery } from '@/utils/queries/pa
 import { useDeletePageMutation } from '@/utils/queries/pageQueries'
 import { toast } from 'sonner'
 import { ConfirmModal } from '@/components/common/ConfirmModal'
+import { useWebSocketContext } from '@/contexts/WebSocketProvider'
+import { useQueryClient } from '@tanstack/react-query'
 
 const Pages = () => {
   const [search, setSearch] = useState('')
@@ -18,6 +20,8 @@ const Pages = () => {
   const [openAdd, setOpenAdd] = useState(false)
   const [openDeleteModal, setOpenDeleteModal] = useState(false)
   const [selectedPageId, setSelectedPageId] = useState<number | null>(null)
+  const queryClient = useQueryClient()
+  const { lastMessage } = useWebSocketContext()
 
   const { data, isLoading } = useUnlinkedPagesQuery({
     page,
@@ -27,6 +31,38 @@ const Pages = () => {
   })
   const deletePageMutation = useDeletePageMutation()
   const createPageMutation = useCreatePageMutation()
+  useEffect(() => {
+    if (!lastMessage) return
+    if (lastMessage.type !== 'PAGE_STATUS_UPDATE') return
+
+    const { page_id, status, page_title, page_url, updated_on } = lastMessage.payload
+
+    queryClient.setQueriesData(
+      {
+        queryKey: ['unlinked-pages'],
+        exact: false,
+      },
+      (oldData: any) => {
+        if (!oldData || !Array.isArray(oldData.data)) return oldData
+
+        return {
+          ...oldData,
+          data: oldData.data.map((pageItem: any) =>
+            pageItem.id === page_id
+              ? {
+                  ...pageItem,
+                  status: status ?? pageItem.status,
+                  page_title: page_title ?? pageItem.page_title,
+                  page_url: page_url ?? pageItem.page_url,
+                  updated_on: updated_on ?? pageItem.updated_on,
+                }
+              : pageItem,
+          ),
+        }
+      },
+    )
+  }, [lastMessage, queryClient])
+
 
   const handleAdd = (values: { title: string; url: string }) => {
     createPageMutation.mutate(
