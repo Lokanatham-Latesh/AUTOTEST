@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     TEST_SCRIPT_QUEUE: str
     SCENARIO_RERUN_QUEUE: str
     TEST_EXECUTION_QUEUE: str
+    PAGE_STATUS_UPDATE_QUEUE :str
 
     class Config:
         env_file = ".env"

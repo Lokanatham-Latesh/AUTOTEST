@@ -1,36 +1,25 @@
-import { Button } from '@/components/ui/button'
-import { Play, Pause } from 'lucide-react'
-import type { Page } from '@/utils/apis/siteApi'
+import { PageStatus } from '@/types/pageInfo'
+import { Loader2, Play } from 'lucide-react'
 
-type Props = {
-  status: Page['status']
-  onPlay: () => void
+type AnalyzeButtonProps = {
+  status: string
+  onPlay?: () => void
   onPause?: () => void
 }
 
-export function AnalyzeButton({ status, onPlay, onPause }: Props) {
-  const isProcessing = status === 'Processing'
+export function AnalyzeButton({ status, onPlay }: AnalyzeButtonProps) {
+  const isRunnable = status === PageStatus.NEW || status === PageStatus.DONE
+
+  if (!isRunnable) {
+    return <Loader2 className="mx-auto h-5 w-5 animate-spin text-primary" />
+  }
 
   return (
-    <Button
-      size="icon"
-      variant="ghost"
-      className="h-8 w-8"
-      disabled={status === 'Done'}
-      onClick={(e) => {
-        e.stopPropagation()
-        if (isProcessing) {
-          onPause?.()
-        } else {
-          onPlay()
-        }
-      }}
+    <button
+      onClick={onPlay}
+      className="mx-auto flex items-center justify-center text-primary hover:scale-110 transition"
     >
-      {isProcessing ? (
-        <Pause className="h-4 w-4 text-muted-foreground" />
-      ) : (
-        <Play className="h-4 w-4 text-muted-foreground" />
-      )}
-    </Button>
+      <Play size={18} />
+    </button>
   )
 }
