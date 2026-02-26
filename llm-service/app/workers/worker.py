@@ -93,7 +93,6 @@ from app.services.test_scenario_service import TestScenarioService
 from app.services.test_case_service import TestCaseService
 from app.services.test_credential_service import TestCredentialService
 from app.services.test_script_service import TestScriptService
-from app.websocket.manager import manager as ws_manager
 
 from shared_orm.models.site import Site
 from shared_orm.models.page import Page
@@ -328,7 +327,7 @@ class WorkerService:
                 {
                     "event":        "PAGE_EXTRACT_SINGLE_QUEUE",
                     "site_id":      page.site_id,
-                    "site_url":     landing_url,
+                    "extract_url":     landing_url,
                     "page_id":      page.id,
                     "requested_by": requested_by,
                     "timestamp":    datetime.utcnow().isoformat(),
@@ -768,32 +767,41 @@ class WorkerService:
         """
         logger.info(f"[PAGE_EXTRACT_SINGLE] Started | payload={body}")
 
-        site_id      = body["site_id"]
-        site_url     = body["site_url"]
+        site_id      = body["site_id"] # can be null if the page is orphaned, but we still want to attempt extraction
+        extract_url  = body["extract_url"]
         page_id      = body["page_id"]   # originating page (for logging)
         requested_by = body["requested_by"]
 
         db = SessionLocal()
         try:
-            # ── Pause check ──────────────────────────────────────────────────
-            if self._is_paused(site_id):
-                logger.info(f"[PAGE_EXTRACT_SINGLE] Site paused — holding | site_id={site_id}")
+            site = None
+            base_domain = None
+
+            if site_id:
+                # ── Pause check ──────────────────────────────────────────────────
+                if self._is_paused(site_id):
+                    logger.info(f"[PAGE_EXTRACT_SINGLE] Site paused — holding | site_id={site_id}")
+                    return
+
+                site = db.query(Site).filter(Site.id == site_id).first()
+                if not site:
+                    logger.warning(f"[PAGE_EXTRACT_SINGLE] Site {site_id} not found — skipping")
+                    return
+
+            if not extract_url:
+                logger.warning("[PAGE_EXTRACT_SINGLE] No extract_url provided — skipping extraction")
                 return
 
-            site = db.query(Site).filter(Site.id == site_id).first()
-            if not site:
-                logger.warning(f"[PAGE_EXTRACT_SINGLE] Site {site_id} not found — skipping")
-                return
+            base_domain = urlparse(extract_url).netloc
 
             loop   = asyncio.get_running_loop()
             driver = get_driver()
 
             try:
                 urls = await loop.run_in_executor(
-                    None, URLExtractor(driver, logger).extract_urls, site_url
+                    None, URLExtractor(driver, logger).extract_urls, extract_url
                 )
 
-                base_domain = urlparse(site_url).netloc
                 new_pages   = []
 
                 for url in urls:
@@ -810,13 +818,21 @@ class WorkerService:
                         db.add(new_page)
                         new_pages.append(new_page)
 
-                    parsed = urlparse(url)
-                    if parsed.netloc != base_domain:
-                        if not db.query(SiteAlias).filter(
-                            SiteAlias.site_id == site.id,
-                            SiteAlias.site_alias_url == parsed.netloc,
-                        ).first():
-                            db.add(SiteAlias(site_id=site.id, site_alias_url=parsed.netloc))
+                    if site:
+                        parsed = urlparse(url)
+                        if parsed.netloc != base_domain:
+                            alias_exists = db.query(SiteAlias).filter(
+                                SiteAlias.site_id == site.id,
+                                SiteAlias.site_alias_url == parsed.netloc,
+                            ).first()
+
+                            if not alias_exists:
+                                db.add(
+                                    SiteAlias(
+                                        site_id=site.id,
+                                        site_alias_url=parsed.netloc
+                                    )
+                                )
 
                 db.commit()
                 for np in new_pages:
@@ -1015,7 +1031,7 @@ class WorkerService:
                     {
                         "event":        "PAGE_EXTRACT_SINGLE_QUEUE",
                         "site_id":      site_id,
-                        "site_url":     landing_url,
+                        "extract_url":     landing_url,
                         "page_id":      auth_page.id,
                         "requested_by": requested_by,
                         "timestamp":    datetime.utcnow().isoformat(),
