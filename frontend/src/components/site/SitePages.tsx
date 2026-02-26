@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Pagination } from '@/components/common/Pagination'
 import { ConfirmModal } from '@/components/common/ConfirmModal'
@@ -8,6 +8,8 @@ import { useSitePagesQuery } from '@/utils/queries/sitesQuery'
 import { useParams } from 'react-router-dom'
 import { useDeletePageMutation } from '@/utils/queries/pageQueries'
 import { toast } from 'sonner'
+import { useWebSocketContext } from '@/contexts/WebSocketProvider'
+import { useQueryClient } from '@tanstack/react-query'
 
 const SitePages = () => {
   const { id } = useParams<{ id: string }>()
@@ -17,7 +19,8 @@ const SitePages = () => {
   const [sort, setSort] = useState<SortType>('created_desc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-
+  const { lastMessage } = useWebSocketContext()
+  const queryClient = useQueryClient()
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedPageId, setSelectedPageId] = useState<number | null>(null)
 
@@ -50,8 +53,38 @@ const SitePages = () => {
       },
     })
   }
+ useEffect(() => {
+   if (!lastMessage) return
+   if (lastMessage.type !== 'PAGE_STATUS_UPDATE') return
 
-  return (
+   const { page_id, status, page_title, page_url, updated_on } = lastMessage.payload
+
+   queryClient.setQueriesData(
+     {
+       queryKey: ['site-pages', siteId],
+       exact: false,
+     },
+     (oldData: any) => {
+       if (!oldData?.data) return oldData
+
+       return {
+         ...oldData,
+         data: oldData.data.map((pageItem: any) =>
+           pageItem.id === page_id
+             ? {
+                 ...pageItem,
+                 status: status ?? pageItem.status,
+                 page_title: page_title ?? pageItem.page_title,
+                 page_url: page_url ?? pageItem.page_url,
+                 updated_on: updated_on ?? pageItem.updated_on,
+               }
+             : pageItem,
+         ),
+       }
+     },
+   )
+ }, [lastMessage, queryClient, siteId])
+ return (
     <div className="flex h-full flex-col">
       <SearchBar
         searchQuery={search}

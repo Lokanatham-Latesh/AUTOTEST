@@ -1,39 +1,89 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { List, Database, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useQueryClient } from '@tanstack/react-query'
+import { useWebSocketContext } from '@/contexts/WebSocketProvider'
 import { mapPageStatusToAnalyzeStatus } from '@/utils/statusMapper'
 import { usePageInfoQuery } from '@/utils/queries/pageQueries'
 import StatusBadge from '../status/StatusBadge'
 import StatusDots from '../status/StatusDots'
 import { PageStatus } from '@/types/pageInfo'
 
-
-
 const PageInfoPage: React.FC = () => {
- const { id } = useParams<{ id: string }>()
+  const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
 
-  const siteId = searchParams.get('site_id')
+  const siteIdParam = searchParams.get('site_id')
+  const pageId = Number(id)
+  const siteId = siteIdParam ? Number(siteIdParam) : undefined
+
+  const queryClient = useQueryClient()
+  const { lastMessage } = useWebSocketContext()
 
   const { data, isLoading, isError } = usePageInfoQuery({
-    page_id: Number(id),
-    site_id: siteId ? Number(siteId) : undefined,
+    page_id: pageId,
+    site_id: siteId,
   })
-const analyzeStatus = mapPageStatusToAnalyzeStatus(data?.status ?? PageStatus.NEW)
+
+useEffect(() => {
+  if (!lastMessage) return
+  if (lastMessage.type !== 'PAGE_STATUS_UPDATE') return
+
+  const {
+    page_id,
+    status,
+    updated_on,
+    page_title,
+    page_url,
+    test_scenario_count,
+    test_case_count,
+  } = lastMessage.payload
+
+  if (page_id !== pageId) return
+
+  queryClient.setQueriesData(
+    {
+      queryKey: ['page-info', pageId],
+      exact: false,
+    },
+    (oldData: any) => {
+      if (!oldData) return oldData
+
+      return {
+        ...oldData,
+        status: status ?? oldData.status,
+        updated_on: updated_on ?? oldData.updated_on,
+        page_title: page_title ?? oldData.page_title,
+        page_url: page_url ?? oldData.page_url,
+        test_scenario_count: test_scenario_count ?? oldData.test_scenario_count,
+        test_case_count: test_case_count ?? oldData.test_case_count,
+      }
+    },
+  )
+}, [lastMessage, pageId, queryClient])
   if (isLoading)
     return (
       <div className="flex items-center justify-center h-full">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
       </div>
     )
+
   if (isError || !data) return <div>Failed to load page info</div>
 
-  // In a real app this would come from an API:
+  const analyzeStatus = mapPageStatusToAnalyzeStatus(data.status ?? PageStatus.NEW)
 
   const dashboardStats = [
-    { label: 'Test Scenario', value: data.test_scenario_count, icon: <List className="w-5 h-5" /> },
-    { label: 'Test Cases', value: data.test_case_count, icon: <Database className="w-5 h-5" /> },
+    {
+      label: 'Test Scenario',
+      value: data.test_scenario_count,
+      icon: <List className="w-5 h-5" />,
+    },
+    {
+      label: 'Test Cases',
+      value: data.test_case_count,
+      icon: <Database className="w-5 h-5" />,
+    },
     {
       label: 'Schedule Test Case',
       value: data.scheduled_test_case_count,
@@ -68,7 +118,7 @@ const analyzeStatus = mapPageStatusToAnalyzeStatus(data?.status ?? PageStatus.NE
           </div>
         </div>
 
-        {/* Site Dashboard */}
+        {/* Dashboard */}
         <div className="border border-[#E4D7D7] bg-white rounded-[6px] overflow-hidden">
           <div className="bg-[#FFF8F8] border-b border-[#E4D7D7] py-3 px-4">
             <h2 className="text-[15px] font-semibold text-[#322525]">Page Dashboard</h2>
@@ -94,16 +144,22 @@ const analyzeStatus = mapPageStatusToAnalyzeStatus(data?.status ?? PageStatus.NE
       {/* RIGHT COLUMN */}
       <div className="border border-[#E4D7D7] bg-white rounded-[6px] h-fit">
         <div className="bg-[#FFF8F8] border-b border-[#E4D7D7] py-3 px-4">
-          <h2 className="text-[15px] font-semibold text-[#322525]">Site Detail</h2>
+          <h2 className="text-[15px] font-semibold text-[#322525]">Page Detail</h2>
         </div>
 
         <div className="p-6 space-y-6">
-          <DetailItem label="Created On" value={new Date(data.created_on).toLocaleString('en-GB')} />
-          <DetailItem label="Updated On" value={new Date(data.updated_on).toLocaleString('en-GB')} />
-          <DetailItem label="Site Title" value={data.page_title} />
+          <DetailItem
+            label="Created On"
+            value={new Date(data.created_on).toLocaleString('en-GB')}
+          />
+          <DetailItem
+            label="Updated On"
+            value={new Date(data.updated_on).toLocaleString('en-GB')}
+          />
+          <DetailItem label="Page Title" value={data.page_title} />
 
           <div>
-            <p className="text-[11px] font-semibold uppercase text-[#8B6E6E] mb-1">Site URL</p>
+            <p className="text-[11px] font-semibold uppercase text-[#8B6E6E] mb-1">Page URL</p>
             <a
               href={data.page_url}
               target="_blank"

@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom'
 import { DynamicTable } from '@/components/table/DynamicTable'
-
 import { formatDateDDMMYYYY } from '@/utils/helper'
 import type { Page } from '@/utils/apis/siteApi'
 import { StatusPill } from '../table/StatusPill'
@@ -17,7 +16,6 @@ export function SitePageTable({
 }) {
   const [editOpen, setEditOpen] = useState(false)
   const [selectedPage, setSelectedPage] = useState<Page | null>(null)
-
   const navigate = useNavigate()
 
   const columns = [
@@ -65,13 +63,7 @@ export function SitePageTable({
         </div>
       ),
       align: 'center' as const,
-      render: (p: Page) => (
-        <AnalyzeButton
-          status={p.status}
-          onPlay={() => handlePlay(p)}
-          onPause={() => handlePause(p)}
-        />
-      ),
+      render: (p: Page) => <AnalyzeButton status={p.status} onPlay={() => handlePlay(p)} />,
     },
   ]
 
@@ -100,10 +92,6 @@ export function SitePageTable({
 
   function handlePlay(page: Page) {
     console.log('START ANALYSIS', page.id)
-  }
-
-  function handlePause(page: Page) {
-    console.log('PAUSE ANALYSIS', page.id)
   }
 
   return (
