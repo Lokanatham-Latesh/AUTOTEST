@@ -2,24 +2,37 @@ import React, { createContext, useContext, useCallback, useEffect, useRef } from
 import useWebSocket, { ReadyState, type Options } from 'react-use-websocket'
 
 import { WS_CONFIG } from '@/config/websocket'
-import type { WSBaseMessage, WSMessageType } from '@/types/websocket'
+import type { WSMessage } from '@/types/websocket'
 import { useAuth } from '@/contexts/AuthContext'
 
-// const WS_URL = import.meta.env.VITE_WS_URL;
-const WS_URL = 'ws://localhost:8000/api/v1/ws'
+const WS_URL = import.meta.env.VITE_WS_URL
+
+/* ---------------------------------------
+   Context Type
+---------------------------------------- */
 
 type WSContextType = {
-  sendMessage: <T>(type: WSMessageType, payload: T) => void
-  lastMessage: WSBaseMessage | null
+  sendMessage: <T>(type: WSMessage['type'], payload: T) => void
+  lastMessage: WSMessage | null
   connectionState: ReadyState
   isConnected: boolean
 }
 
 const WSContext = createContext<WSContextType | null>(null)
 
-export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+/* ---------------------------------------
+   Provider
+---------------------------------------- */
+
+export const WebSocketProvider: React.FC<{
+  children: React.ReactNode
+}> = ({ children }) => {
   const { isAuthenticated } = useAuth()
   const heartbeatIntervalRef = useRef<number | null>(null)
+
+  /* ---------------------------------------
+     WebSocket Options
+  ---------------------------------------- */
 
   const socketOptions: Options = {
     shouldReconnect: () => isAuthenticated,
@@ -29,10 +42,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     onOpen: () => {
       console.log('WebSocket connected')
 
+      // Clear old heartbeat
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current)
       }
 
+      // Start heartbeat
       heartbeatIntervalRef.current = window.setInterval(() => {
         sendJsonMessage({
           type: 'PING',
@@ -56,12 +71,19 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     },
   }
 
-  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(
+  /* ---------------------------------------
+     WebSocket Hook (Strongly Typed)
+  ---------------------------------------- */
+
+  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket<WSMessage>(
     isAuthenticated ? WS_URL : null,
     socketOptions,
   )
 
-  // Cleanup heartbeat on unmount
+  /* ---------------------------------------
+     Cleanup on Unmount
+  ---------------------------------------- */
+
   useEffect(() => {
     return () => {
       if (heartbeatIntervalRef.current) {
@@ -70,8 +92,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [])
 
+  /* ---------------------------------------
+     Send Message Wrapper
+  ---------------------------------------- */
+
   const sendMessage = useCallback(
-    <T,>(type: WSMessageType, payload: T) => {
+    <T,>(type: WSMessage['type'], payload: T) => {
       if (readyState === ReadyState.OPEN) {
         sendJsonMessage({
           type,
@@ -85,11 +111,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     [sendJsonMessage, readyState],
   )
 
+  /* ---------------------------------------
+     Context Provider
+  ---------------------------------------- */
+
   return (
     <WSContext.Provider
       value={{
         sendMessage,
-        lastMessage: lastJsonMessage as WSBaseMessage | null,
+        lastMessage: lastJsonMessage ?? null,
         connectionState: readyState,
         isConnected: readyState === ReadyState.OPEN,
       }}
@@ -99,10 +129,16 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   )
 }
 
+/* ---------------------------------------
+   Hook
+---------------------------------------- */
+
 export const useWebSocketContext = (): WSContextType => {
   const ctx = useContext(WSContext)
+
   if (!ctx) {
     throw new Error('useWebSocketContext must be used within WebSocketProvider')
   }
+
   return ctx
 }

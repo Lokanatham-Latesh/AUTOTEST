@@ -156,37 +156,61 @@ class WorkerService:
         return page
 
     async def _notify_ws(self, page: Page, requested_by: int):
+          
         """
-        Send a PAGE_STATUS_UPDATE_QUEUE WebSocket message to the requesting user.
-        Fires-and-forgets on failure — a WS send error must never crash the pipeline.
-        """
-        # try:
-            # await backend_rabbitmq_producer.publish_message(
-            #     settings.PAGE_STATUS_UPDATE_QUEUE,
-            #     {
-            #         "page_id":    page.id,
-            #         "page_url":   page.page_url,
-            #         "site_id":    page.site_id,
-            #         "status":     page.status,
-            #         "updated_on": page.updated_on.isoformat() if page.updated_on else None,
-            #     }
-            # )
+          Publish PAGE_STATUS_UPDATE event to RabbitMQ.
 
-            # await ws_manager.send(
-            #     requested_by,
-            #     {
-            #         "type": "PAGE_STATUS_UPDATE_QUEUE",
-            #         "payload": {
-            #             "page_id":    page.id,
-            #             "page_url":   page.page_url,
-            #             "site_id":    page.site_id,
-            #             "status":     page.status,
-            #             "updated_on": page.updated_on.isoformat() if page.updated_on else None,
-            #         },
-            #     },
-            # )
-        # except Exception as e:
-        #     logger.warning(f"[WS] Failed to send PAGE_STATUS_UPDATE_QUEUE | page_id={page.id} | {e}")
+          This method is fire-and-forget.
+          Any failure here must NOT break the main processing pipeline.
+        """
+
+        try:
+              
+              db = SessionLocal()
+              scenario_count = (
+            db.query(TestScenario)
+            .filter(TestScenario.page_id == page.id)
+            .count()
+        )
+              test_case_count = (
+            db.query(TestCase)
+            .filter(TestCase.page_id == page.id)
+            .count()
+        )
+              
+              message = {
+            "event": "PAGE_STATUS_UPDATE",
+            "payload": {
+                "page_id": page.id,
+                "page_url": page.page_url,
+                "site_id": page.site_id,
+                "page_title": page.page_title,
+                "status": page.status,
+                "test_scenario_count": scenario_count,
+                "test_case_count": test_case_count,
+                "updated_on": (
+                    page.updated_on.isoformat()
+                    if page.updated_on
+                    else None
+                ),
+            },
+        }
+              await rabbitmq_producer.publish_message(
+            settings.PAGE_STATUS_UPDATE_QUEUE,
+            message,
+        )
+              logger.info(
+            f"[WS_NOTIFY] Published PAGE_STATUS_UPDATE | "
+            f"page_id={page.id} | "
+            f"status={page.status} | "
+            f"scenarios={scenario_count} | "
+            f"cases={test_case_count}"
+        )
+        except Exception as e:
+            logger.error(
+            f"[WS_NOTIFY] FAILED to publish PAGE_STATUS_UPDATE | "
+            f"page_id={page.id} | status={page.status} | error={e}"
+        )
 
     def _get_login_test_case(self, db, page_id: int):
         """
