@@ -31,6 +31,11 @@ export const scenarioApi = {
   deleteScenario: async (scenarioId: number): Promise<void> => {
     await api.delete(`/scenarios/${scenarioId}`)
   },
+
+  regenerateScenarios: async (pageId: number): Promise<{ message: string }> => {
+    const { data } = await api.post(`/scenarios/${pageId}/regenerate-scenarios`)
+    return data
+  },
 }
 
 

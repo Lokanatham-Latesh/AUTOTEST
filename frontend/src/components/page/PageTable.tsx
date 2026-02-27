@@ -7,6 +7,8 @@ import type { Page } from '@/utils/apis/pageApi'
 import { useState } from 'react'
 import { EditPageTitleDialog } from './EditPageTitleDialog'
 import type { TableAction } from '../table/types'
+import { toast } from 'sonner'
+import { useRegenerateScenariosMutation } from '@/utils/queries/scenarioQueries'
 
 type Props = {
   data: Page[]
@@ -17,6 +19,7 @@ export function PageTable({ data, onDelete }: Props) {
   const navigate = useNavigate()
   const [editOpen, setEditOpen] = useState(false)
   const [selectedPage, setSelectedPage] = useState<Page | null>(null)
+  const { mutate: regenerateScenarios } = useRegenerateScenariosMutation()
 
   const columns = [
     {
@@ -54,7 +57,12 @@ export function PageTable({ data, onDelete }: Props) {
     },
     {
       key: 'analyze',
-      header: 'Analyze',
+      header: (
+        <div className="flex flex-col items-center">
+          <span>Re-Generate</span>
+          <span className="text-xs text-muted-foreground">Test Scenario</span>
+        </div>
+      ),
       align: 'center' as const,
       render: (p: Page) => (
         <AnalyzeButton
@@ -90,7 +98,14 @@ export function PageTable({ data, onDelete }: Props) {
   ]
 
   function handlePlay(page: Page) {
-    console.log('START ANALYSIS', page.id)
+    regenerateScenarios(page.id, {
+      onSuccess: () => {
+        toast.success('Test scenario regeneration started')
+      },
+      onError: () => {
+        toast.error('Failed to start regeneration')
+      },
+    })
   }
 
   function handlePause(page: Page) {

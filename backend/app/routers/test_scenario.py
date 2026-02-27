@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, Query,Path, status, Response
+from fastapi import APIRouter, Depends, Query,Path, status, Response, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.middleware.auth_middleware import auth_required
 from shared_orm.models.user import User
 from app.services.test_scenario_service import ScenarioService
 from app.schemas.test_scenarios_schema import PaginatedScenarioResponse,ScenarioDetailResponse, UpdateScenarioRequest
+from app.messaging.rabbitmq_producer import rabbitmq_producer
+from datetime import datetime, timezone
+from app.config.setting import settings
 
 router = APIRouter(prefix="/scenarios", tags=["Scenarios"])
 
@@ -94,3 +97,29 @@ def update_test_scenario(
     )
 
     return updated_scenario
+
+@router.post("/{page_id}/regenerate-scenarios")
+def regenerate_scenarios(
+    page_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required),
+):
+    page = scenario_service.regenerate_scenarios_for_page(
+        db=db,
+        page_id=page_id,
+        user=current_user
+    )
+
+    background_tasks.add_task(
+        rabbitmq_producer.publish_message,
+        settings.TEST_SCENARIO_QUEUE,
+        {
+            "event": "TEST_SCENARIO_GENERATE",
+            "page_id": page_id,
+            "requested_by": current_user.id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+        5,
+    )
+    return {"message": "Test scenario regeneration triggered"}

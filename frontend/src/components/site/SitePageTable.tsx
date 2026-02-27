@@ -6,7 +6,8 @@ import { StatusPill } from '../table/StatusPill'
 import { AnalyzeButton } from '../table/AnalyzeButton'
 import { useState } from 'react'
 import { EditPageTitleDialog } from '../page/EditPageTitleDialog'
-
+import { toast } from 'sonner'
+import { useRegenerateScenariosMutation } from '@/utils/queries/scenarioQueries'
 export function SitePageTable({
   data,
   onDelete,
@@ -17,6 +18,7 @@ export function SitePageTable({
   const [editOpen, setEditOpen] = useState(false)
   const [selectedPage, setSelectedPage] = useState<Page | null>(null)
   const navigate = useNavigate()
+  const { mutate: regenerateScenarios } = useRegenerateScenariosMutation()
 
   const columns = [
     {
@@ -58,7 +60,7 @@ export function SitePageTable({
       key: 'analyze',
       header: (
         <div className="flex flex-col items-center">
-          <span>Generate</span>
+          <span>Re-Generate</span>
           <span className="text-xs text-muted-foreground">Test Scenario</span>
         </div>
       ),
@@ -91,7 +93,14 @@ export function SitePageTable({
   ]
 
   function handlePlay(page: Page) {
-    console.log('START ANALYSIS', page.id)
+    regenerateScenarios(page.id, {
+      onSuccess: () => {
+        toast.success('Test scenario regeneration started')
+      },
+      onError: () => {
+        toast.error('Failed to start regeneration')
+      },
+    })
   }
 
   return (
