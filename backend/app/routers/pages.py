@@ -100,12 +100,12 @@ def update_page_title(
     status_code=status.HTTP_201_CREATED,
     summary="Create new unlinked page"
 )
-def create_page(
+async def create_page(
     payload: PageCreateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_required)
 ):
-    return page_service.create_page(
+    return await page_service.create_page(
         page_title=payload.page_title,
         page_url=payload.page_url,
         db=db,
