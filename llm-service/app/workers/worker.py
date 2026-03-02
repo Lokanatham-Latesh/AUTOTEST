@@ -93,6 +93,7 @@ from app.services.test_scenario_service import TestScenarioService
 from app.services.test_case_service import TestCaseService
 from app.services.test_credential_service import TestCredentialService
 from app.services.test_script_service import TestScriptService
+from app.services.test_execution_service import TestExecutionService
 
 from shared_orm.models.site import Site
 from shared_orm.models.page import Page
@@ -763,9 +764,68 @@ class WorkerService:
     # =========================================================================
 
     async def process_test_execution(self, body: dict):
-        logger.info(f"[TEST_EXECUTION] Received | payload={body}")
-        # TODO: implement test execution logic
-        pass
+        """
+        Execute the generated Selenium scripts for every test case on the page
+        and persist results to the test_execution table.
+
+        One TestExecution row is written per TestCase per execution run.
+        Re-runs update existing rows (upsert) so history doesn't accumulate.
+
+        Body keys:
+        page_id      — page to execute
+        requested_by — user id → stored as executed_by
+        scenario_id  — (optional) targeted single-scenario execution
+        test_suite_id — (optional) FK for grouping runs
+        """
+        logger.info(f"[TEST_EXECUTION] Started | payload={body}")
+
+        page_id       = body["page_id"]
+        requested_by  = body["requested_by"]
+        scenario_id   = body.get("scenario_id")    # None = all scenarios
+        test_suite_id = body.get("test_suite_id")  # optional grouping
+
+        db = SessionLocal()
+        try:
+            page = db.query(Page).filter(Page.id == page_id).first()
+            if not page:
+                logger.warning(f"[TEST_EXECUTION] Page {page_id} not found — skipping")
+                return
+
+            # Pause check — executions are long-running Selenium runs
+            if page.site_id and self._is_paused(page.site_id):
+                logger.info(
+                    f"[TEST_EXECUTION] Site paused — holding | page_id={page_id}"
+                )
+                return
+
+            loop = asyncio.get_running_loop()
+
+            await loop.run_in_executor(
+                None,
+                TestExecutionService(
+                    llm=LLMWrapper(),
+                    prompt_manager=PromptManager(),
+                    logger=logger,
+                ).execute_page,
+                page,
+                requested_by,
+                scenario_id,
+                test_suite_id,
+            )
+
+            logger.info(f"[TEST_EXECUTION] Completed | page_id={page_id}")
+
+            # Notify WebSocket — page execution finished
+            # Re-fetch page to get latest state for the WS payload
+            db.refresh(page)
+            await self._notify_ws(page, requested_by)
+
+        except Exception:
+            logger.exception("[TEST_EXECUTION] Failed")
+            raise
+
+        finally:
+            db.close()
 
     # =========================================================================
     # STEP 2b — PAGE EXTRACT SINGLE  (post-auth page discovery only)
@@ -774,7 +834,7 @@ class WorkerService:
     async def process_page_extract_single(self, body: dict):
         """
         Extract URLs from a single post-auth landing page.
-        Only inserts URLs not already in the Page table (anti-loop guarantee).
+        Only inserts URLs not already in the Page table.
         Emits PAGE_ANALYSE only for the newly inserted pages.
         """
         logger.info(f"[PAGE_EXTRACT_SINGLE] Started | payload={body}")
@@ -784,27 +844,70 @@ class WorkerService:
         page_id      = body["page_id"]   # originating page (for logging)
         requested_by = body["requested_by"]
 
+        if not extract_url:
+            logger.error(f"[PAGE_EXTRACT_SINGLE] No URL in payload — skipping | body={body}")
+            return
+        
         db = SessionLocal()
         try:
+
             site = None
             base_domain = None
 
-            if site_id:
-                # ── Pause check ──────────────────────────────────────────────────
-                if self._is_paused(site_id):
-                    logger.info(f"[PAGE_EXTRACT_SINGLE] Site paused — holding | site_id={site_id}")
-                    return
-
-                site = db.query(Site).filter(Site.id == site_id).first()
-                if not site:
-                    logger.warning(f"[PAGE_EXTRACT_SINGLE] Site {site_id} not found — skipping")
-                    return
-
-            if not extract_url:
-                logger.warning("[PAGE_EXTRACT_SINGLE] No extract_url provided — skipping extraction")
+            if site_id and self._is_paused(site_id):
+                logger.info(
+                    f"[PAGE_EXTRACT_SINGLE] Site paused — holding | site_id={site_id}"
+                )
                 return
 
-            base_domain = urlparse(extract_url).netloc
+            # ─────────────────────────────────────────────────────────────────
+            # CASE A — Standalone single page where site_id is None
+            # The page already exists; just forward it to PAGE_ANALYSE.
+            # ─────────────────────────────────────────────────────────────────
+            if not site_id:
+                page = db.query(Page).filter(Page.id == page_id).first()
+                if not page:
+                    logger.warning(
+                        f"[PAGE_EXTRACT_SINGLE] Standalone page {page_id} not found — skipping"
+                    )
+                    return
+
+                # Guard: only process if still in initial state
+                if page.status != PageStatus.NEW:
+                    logger.info(
+                        f"[PAGE_EXTRACT_SINGLE] Standalone page {page_id} already "
+                        f"processing (status={page.status}) — skipping"
+                    )
+                    return
+
+                logger.info(
+                    f"[PAGE_EXTRACT_SINGLE] Standalone page — forwarding to PAGE_ANALYSE | "
+                    f"page_id={page_id} url={extract_url}"
+                )
+                
+                await rabbitmq_producer.publish_message(
+                    settings.PAGE_ANALYSE_QUEUE,
+                    {
+                        "event":        "PAGE_ANALYSE",
+                        "page_id":      page_id,
+                        "requested_by": requested_by,
+                        "timestamp":    datetime.utcnow().isoformat(),
+                    },
+                    priority=5,
+                )
+                return
+
+
+            # ─────────────────────────────────────────────────────────────────
+            # CASE B — Normal flow with site_id:
+            # Insert new page if URL not seen before, then emit PAGE_ANALYSE.
+            # ─────────────────────────────────────────────────────────────────
+            site = db.query(Site).filter(Site.id == site_id).first()
+            if not site:
+                logger.warning(
+                    f"[PAGE_EXTRACT_SINGLE] Site {site_id} not found — skipping"
+                )
+                return
 
             loop   = asyncio.get_running_loop()
             driver = get_driver()
@@ -814,6 +917,7 @@ class WorkerService:
                     None, URLExtractor(driver, logger).extract_urls, extract_url
                 )
 
+                base_domain = urlparse(extract_url).netloc
                 new_pages   = []
 
                 for url in urls:
@@ -830,21 +934,20 @@ class WorkerService:
                         db.add(new_page)
                         new_pages.append(new_page)
 
-                    if site:
-                        parsed = urlparse(url)
-                        if parsed.netloc != base_domain:
-                            alias_exists = db.query(SiteAlias).filter(
-                                SiteAlias.site_id == site.id,
-                                SiteAlias.site_alias_url == parsed.netloc,
-                            ).first()
+                    parsed = urlparse(url)
+                    if parsed.netloc != base_domain:
+                        alias_exists = db.query(SiteAlias).filter(
+                            SiteAlias.site_id == site.id,
+                            SiteAlias.site_alias_url == parsed.netloc,
+                        ).first()
 
-                            if not alias_exists:
-                                db.add(
-                                    SiteAlias(
-                                        site_id=site.id,
-                                        site_alias_url=parsed.netloc
-                                    )
+                        if not alias_exists:
+                            db.add(
+                                SiteAlias(
+                                    site_id=site.id,
+                                    site_alias_url=parsed.netloc
                                 )
+                            )
 
                 db.commit()
                 for np in new_pages:
@@ -858,7 +961,7 @@ class WorkerService:
                 f"new_pages={len(new_pages)}"
             )
 
-            # Emit PAGE_ANALYSE only for brand-new pages
+            # Emit PAGE_ANALYSE
             for new_page in new_pages:
                 await rabbitmq_producer.publish_message(
                     settings.PAGE_ANALYSE_QUEUE,
