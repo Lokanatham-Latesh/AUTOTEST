@@ -59,3 +59,8 @@ export interface ScenarioUpdateResponse {
   updated_by: number
 }
 
+export type ScenarioScriptResponse = {
+  id: number
+  title: string
+  script: string | null
+}

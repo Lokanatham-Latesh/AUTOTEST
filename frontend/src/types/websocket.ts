@@ -15,7 +15,8 @@ export type WSMessage =
         page_id: number
         status: string
         test_scenario_count: number
-        test_case_count : number
+        test_case_count: number
+        scenario_id? : number
       }
       timestamp?: number
     }

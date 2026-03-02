@@ -314,9 +314,49 @@ class ScenarioService:
         logger.info(
         f"[REGENERATE_SCENARIOS_SUCCESS] PageID={page_id}")
         return page
-        
-        
-            
     
-    
+
+    def get_scenario_script(self, db: Session, scenario_id: int):
+        """
+        Fetch test script content for a given scenario ID.
+        Raises 404 if scenario not found.
+        """
+        logger.info(f"[GET_SCENARIO_SCRIPT_REQUEST] ScenarioID={scenario_id}")
+
+        scenario = (db.query(TestScenario).filter(TestScenario.id == scenario_id).first())
+        if not scenario:
+            logger.warning(f"[GET_SCENARIO_SCRIPT_FAILED] Scenario not found | ScenarioID={scenario_id}")
+            raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test Scenario not found"
+            )
         
+        logger.info(f"[GET_SCENARIO_SCRIPT_SUCCESS] ScenarioID={scenario_id}")
+
+        return {
+        "id": scenario.id,
+        "title": scenario.title,
+        "script": scenario.script 
+        }
+    def regenerate_test_cases_for_scenario(
+        self,
+        db: Session,
+        scenario_id: int,
+        user: User,
+    ):
+        """
+       Trigger test case regeneration for a specific scenario.
+       Fetch page_id internally from DB.
+       """
+        scenario = (db.query(TestScenario).filter(TestScenario.id == scenario_id).first())
+
+        if not scenario:
+            raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test Scenario not found"
+            )
+        return {
+        "page_id": scenario.page_id,
+        "scenario_id": scenario.id,
+        }
+    

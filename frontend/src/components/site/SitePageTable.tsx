@@ -30,31 +30,41 @@ export function SitePageTable({
     {
       key: 'title',
       header: 'Title',
+      width: 'w-[260px]',
       render: (p: Page) => (
-        <span className="max-w-[260px] truncate font-medium">{p.page_title}</span>
+        <div className="w-full truncate font-medium" title={p.page_title}>
+          {p.page_title}
+        </div>
       ),
     },
     {
       key: 'url',
       header: 'URL',
-      width: 'w-60',
+      width: 'w-[260px]',
       render: (p: Page) => (
-        <a
-          href={p.page_url}
-          target="_blank"
-          rel="noreferrer"
-          className="text-primary hover:underline"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {p.page_url}
-        </a>
+        <div className="w-full overflow-hidden">
+          <a
+            href={p.page_url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="block truncate text-primary hover:underline"
+            title={p.page_url}
+          >
+            {p.page_url}
+          </a>
+        </div>
       ),
     },
     {
       key: 'status',
       header: 'Status',
-      width: 'w-[140px]',
-      render: (p: Page) => <StatusPill status={p.status} />,
+      width: 'w-[180px]',
+      render: (p: Page) => (
+        <div className="">
+          <StatusPill status={p.status} />
+        </div>
+      ),
     },
     {
       key: 'analyze',
@@ -64,8 +74,13 @@ export function SitePageTable({
           <span className="text-xs text-muted-foreground">Test Scenario</span>
         </div>
       ),
+      width: 'w-[200px]',
       align: 'center' as const,
-      render: (p: Page) => <AnalyzeButton status={p.status} onPlay={() => handlePlay(p)} />,
+      render: (p: Page) => (
+        <div className="pl-6">
+          <AnalyzeButton status={p.status} onPlay={() => handlePlay(p)} />
+        </div>
+      ),
     },
   ]
 

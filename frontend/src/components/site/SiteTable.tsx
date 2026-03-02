@@ -33,58 +33,70 @@ type Props = {
 
 export function SiteTable({ data, onDelete }: Props) {
   return (
-    <div className="">
-      <Table>
+    <div className="w-full">
+      {/* Fixed table layout prevents column jumping */}
+      <Table className="table-fixed w-full">
         <TableHeader className="bg-muted/40">
           <TableRow>
             <TableHead className="w-[140px]">Date</TableHead>
-            <TableHead>Title</TableHead>
-            <TableHead className="w-60">URL</TableHead>
-            <TableHead className="w-[140px]">Status</TableHead>
+            <TableHead className="w-[260px]">Title</TableHead>
+            <TableHead className="w-[260px]">URL</TableHead>
+            <TableHead className="w-[160px]">Status</TableHead>
             <TableHead className="w-[120px] text-center">Analyze</TableHead>
-            <TableHead className="w-20 text-right">Action</TableHead>
+            <TableHead className="w-[80px] text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
 
         <TableBody>
           {data.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+              <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
                 No sites available
               </TableCell>
             </TableRow>
           ) : (
             data.map((site) => (
               <TableRow key={site.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                {/* Date */}
                 <TableCell className="text-muted-foreground">
                   {formatDateDDMMYYYY(site.created_on)}
                 </TableCell>
 
-                <TableCell className="max-w-[200px] truncate font-medium" title={site.site_title}>
-                  {site.site_title}
+                {/* Title */}
+                <TableCell className="w-[260px]">
+                  <div className="truncate font-medium" title={site.site_title}>
+                    {site.site_title}
+                  </div>
                 </TableCell>
 
-                <TableCell>
-                  <a
-                    href={site.site_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block max-w-[220px] truncate text-primary hover:underline"
-                    title={site.site_url}
-                  >
-                    {site.site_url}
-                  </a>
+                {/* URL */}
+                <TableCell className="w-[260px]">
+                  <div className="w-full overflow-hidden">
+                    <a
+                      href={site.site_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block truncate text-primary hover:underline"
+                      title={site.site_url}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {site.site_url}
+                    </a>
+                  </div>
                 </TableCell>
 
-                <TableCell>
+                {/* Status */}
+                <TableCell className="w-[160px]">
                   <StatusPill status={site.status} />
                 </TableCell>
 
-                <TableCell className="text-center">
+                {/* Analyze */}
+                <TableCell className="w-[120px] text-center">
                   <AnalyzeButton status={site.status} />
                 </TableCell>
 
-                <TableCell className="text-right">
+                {/* Actions */}
+                <TableCell className="w-[80px] text-right">
                   <RowActions site={site} onDelete={onDelete} />
                 </TableCell>
               </TableRow>
@@ -95,6 +107,8 @@ export function SiteTable({ data, onDelete }: Props) {
     </div>
   )
 }
+
+
 
 function StatusPill({ status }: { status: Site['status'] }) {
   const styles = {
@@ -115,6 +129,8 @@ function StatusPill({ status }: { status: Site['status'] }) {
     </span>
   )
 }
+
+
 function AnalyzeButton({ status }: { status: Site['status'] }) {
   if (status === 'Processing') {
     return (
@@ -123,11 +139,13 @@ function AnalyzeButton({ status }: { status: Site['status'] }) {
   }
 
   return (
-    <Button size="icon" variant="ghost" className="h-8 w-8">
+    <Button size="icon" variant="ghost" className="h-8 w-8 cursor-pointer">
       <Play className="h-4 w-4 text-muted-foreground" />
     </Button>
   )
 }
+
+
 
 function RowActions({ site, onDelete }: { site: Site; onDelete: (site: Site) => void }) {
   const navigate = useNavigate()
@@ -140,7 +158,7 @@ function RowActions({ site, onDelete }: { site: Site; onDelete: (site: Site) => 
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-44 ">
+      <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuItem
           onClick={() => navigate(`/site-info/${site.id}`)}
           className="cursor-pointer"
@@ -148,7 +166,10 @@ function RowActions({ site, onDelete }: { site: Site; onDelete: (site: Site) => 
           Navigate to Site
         </DropdownMenuItem>
 
-        <DropdownMenuItem className="text-destructive" onClick={() => onDelete(site)}>
+        <DropdownMenuItem
+          className="cursor-pointer text-destructive"
+          onClick={() => onDelete(site)}
+        >
           Delete Site
         </DropdownMenuItem>
       </DropdownMenuContent>

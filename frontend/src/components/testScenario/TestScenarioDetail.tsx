@@ -1,15 +1,18 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { Loader2 } from 'lucide-react'
 import { DynamicTable } from '../table/DynamicTable'
 import type { TableAction, TableColumn } from '../table/types'
-import { useScenarioDetails } from '@/utils/queries/scenarioQueries'
+import { useScenarioDetails, useRegenerateTestCasesMutation } from '@/utils/queries/scenarioQueries'
 import { useDeleteTestCaseMutation } from '@/utils/queries/testCaseQueries'
 import { formatDateDDMMYYYY } from '@/utils/helper'
 import { TestScenarioSheetForm } from './TestScenarioSheetForm'
 import { TestCaseSheetForm } from '../testcase/TestCaseSheetForm'
 import { ConfirmModal } from '../common/ConfirmModal'
 import { toast } from 'sonner'
+import { useWebSocketContext } from '@/contexts/WebSocketProvider'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface TestCase {
   id: number
@@ -21,9 +24,13 @@ interface TestCase {
 
 const TestScenarioDetail: React.FC = () => {
   const { tsid } = useParams<{ tsid: string }>()
+  const scenarioId = Number(tsid)
 
-  const { data, isLoading } = useScenarioDetails(Number(tsid))
+  const { data, isLoading } = useScenarioDetails(scenarioId)
   const deleteTestCaseMutation = useDeleteTestCaseMutation()
+  const { mutate: regenerateTestCases } = useRegenerateTestCasesMutation()
+  const queryClient = useQueryClient()
+  const { lastMessage } = useWebSocketContext()
 
   const [openScenarioEdit, setOpenScenarioEdit] = useState(false)
 
@@ -32,6 +39,46 @@ const TestScenarioDetail: React.FC = () => {
 
   const [openTestCaseModal, setOpenTestCaseModal] = useState(false)
   const [editTestCaseId, setEditTestCaseId] = useState<number | null>(null)
+
+  const [isGenerating, setIsGenerating] = useState(false)
+
+  /* ---------------- EXECUTE ---------------- */
+
+  const handleExecute = () => {
+    if (isGenerating) return
+
+    setIsGenerating(true)
+
+    regenerateTestCases(scenarioId, {
+      onError: () => {
+        toast.error('Failed to start test case generation')
+        setIsGenerating(false)
+      },
+    })
+  }
+
+  /* ---------------- WEBSOCKET ---------------- */
+
+  useEffect(() => {
+    if (!lastMessage) return
+    if (lastMessage.type !== 'PAGE_STATUS_UPDATE') return
+
+    const { scenario_id, status } = lastMessage.payload
+
+    if (scenario_id !== scenarioId) return
+
+    if (status === 'done') {
+      setIsGenerating(false)
+
+      queryClient.invalidateQueries({
+        queryKey: ['scenario-details', scenarioId],
+      })
+
+      toast.success('Test case generation completed')
+    } else {
+      setIsGenerating(true)
+    }
+  }, [lastMessage, scenarioId, queryClient])
 
   if (isLoading) return <div className="p-6">Loading...</div>
   if (!data) return <div className="p-6">No data found</div>
@@ -102,7 +149,8 @@ const TestScenarioDetail: React.FC = () => {
       <div className="border bg-white rounded overflow-hidden">
         <div className="bg-[#FFF8F8] border-b p-4 flex justify-between items-center">
           <h2 className="font-semibold">Test Scenario Details</h2>
-          <div className="space-x-2">
+
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
@@ -111,8 +159,15 @@ const TestScenarioDetail: React.FC = () => {
             >
               Edit
             </Button>
-            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white cursor-pointer">
-              Execute
+
+            <Button
+              size="sm"
+              onClick={handleExecute}
+              disabled={isGenerating}
+              className="bg-red-600 hover:bg-red-700 text-white cursor-pointer flex items-center gap-2"
+            >
+              {isGenerating && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isGenerating ? 'Generating...' : 'Execute'}
             </Button>
           </div>
         </div>
@@ -165,15 +220,13 @@ const TestScenarioDetail: React.FC = () => {
           </Button>
         </div>
 
-        <div className="">
-          <DynamicTable
-            data={data.test_cases}
-            columns={testCaseColumns}
-            actions={testCaseActions}
-            getRowKey={(row) => row.id}
-            getRowClassName={(row) => (row.is_valid && row.is_valid_default ? 'bg-red-50' : '')}
-          />
-        </div>
+        <DynamicTable
+          data={data.test_cases}
+          columns={testCaseColumns}
+          actions={testCaseActions}
+          getRowKey={(row) => row.id}
+          getRowClassName={(row) => (row.is_valid && row.is_valid_default ? 'bg-red-50' : '')}
+        />
       </div>
 
       <ConfirmModal
@@ -198,7 +251,7 @@ const TestScenarioDetail: React.FC = () => {
             if (!value) setEditTestCaseId(null)
           }}
           testCaseId={editTestCaseId}
-          scenarioId={Number(tsid)}
+          scenarioId={scenarioId}
         />
       )}
 
@@ -213,7 +266,10 @@ const TestScenarioDetail: React.FC = () => {
   )
 }
 
-const DetailItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+const DetailItem: React.FC<{
+  label: string
+  value: string
+}> = ({ label, value }) => (
   <div>
     <p className="text-xs font-semibold uppercase text-gray-500">{label}</p>
     <p className="text-sm">{value}</p>

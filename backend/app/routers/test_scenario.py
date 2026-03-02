@@ -123,3 +123,44 @@ def regenerate_scenarios(
         5,
     )
     return {"message": "Test scenario regeneration triggered"}
+
+@router.get("/{scenario_id}/test-script")
+def get_test_script(
+    scenario_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required)
+):
+    return ScenarioService().get_scenario_script(db, scenario_id)
+
+@router.post("/{scenario_id}/regenerate-test-cases")
+async def regenerate_test_cases_for_scenario(
+    scenario_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required),
+):
+    """
+    Trigger regeneration of test cases for a specific scenario.
+    """
+
+    result = scenario_service.regenerate_test_cases_for_scenario(
+        db=db,
+        scenario_id=scenario_id,
+        user=current_user,
+    )
+
+    background_tasks.add_task(
+        rabbitmq_producer.publish_message,
+        settings.TEST_CASE_QUEUE,
+        {
+            "event": "TEST_CASE_QUEUE",
+            "page_id": result["page_id"],
+            "scenario_id": result["scenario_id"],  
+            "requested_by": current_user.id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+        5,
+    )
+
+    return {"message": "Test case regeneration triggered"}
+
