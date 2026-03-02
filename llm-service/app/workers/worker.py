@@ -93,6 +93,7 @@ from app.services.test_scenario_service import TestScenarioService
 from app.services.test_case_service import TestCaseService
 from app.services.test_credential_service import TestCredentialService
 from app.services.test_script_service import TestScriptService
+from app.services.test_execution_service import TestExecutionService
 
 from shared_orm.models.site import Site
 from shared_orm.models.page import Page
@@ -775,9 +776,68 @@ class WorkerService:
     # =========================================================================
 
     async def process_test_execution(self, body: dict):
-        logger.info(f"[TEST_EXECUTION] Received | payload={body}")
-        # TODO: implement test execution logic
-        pass
+        """
+        Execute the generated Selenium scripts for every test case on the page
+        and persist results to the test_execution table.
+
+        One TestExecution row is written per TestCase per execution run.
+        Re-runs update existing rows (upsert) so history doesn't accumulate.
+
+        Body keys:
+        page_id      — page to execute
+        requested_by — user id → stored as executed_by
+        scenario_id  — (optional) targeted single-scenario execution
+        test_suite_id — (optional) FK for grouping runs
+        """
+        logger.info(f"[TEST_EXECUTION] Started | payload={body}")
+
+        page_id       = body["page_id"]
+        requested_by  = body["requested_by"]
+        scenario_id   = body.get("scenario_id")    # None = all scenarios
+        test_suite_id = body.get("test_suite_id")  # optional grouping
+
+        db = SessionLocal()
+        try:
+            page = db.query(Page).filter(Page.id == page_id).first()
+            if not page:
+                logger.warning(f"[TEST_EXECUTION] Page {page_id} not found — skipping")
+                return
+
+            # Pause check — executions are long-running Selenium runs
+            if page.site_id and self._is_paused(page.site_id):
+                logger.info(
+                    f"[TEST_EXECUTION] Site paused — holding | page_id={page_id}"
+                )
+                return
+
+            loop = asyncio.get_running_loop()
+
+            await loop.run_in_executor(
+                None,
+                TestExecutionService(
+                    llm=LLMWrapper(),
+                    prompt_manager=PromptManager(),
+                    logger=logger,
+                ).execute_page,
+                page,
+                requested_by,
+                scenario_id,
+                test_suite_id,
+            )
+
+            logger.info(f"[TEST_EXECUTION] Completed | page_id={page_id}")
+
+            # Notify WebSocket — page execution finished
+            # Re-fetch page to get latest state for the WS payload
+            db.refresh(page)
+            await self._notify_ws(page, requested_by)
+
+        except Exception:
+            logger.exception("[TEST_EXECUTION] Failed")
+            raise
+
+        finally:
+            db.close()
 
     # =========================================================================
     # STEP 2b — PAGE EXTRACT SINGLE  (post-auth page discovery only)
