@@ -62,3 +62,17 @@ export const useUpdateScenarioMutation = () => {
   })
 }
 
+export const useRegenerateScenariosMutation = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (pageId: number) => scenarioApi.regenerateScenarios(pageId),
+
+    onSuccess: (_) => {
+      queryClient.invalidateQueries({ queryKey: ['scenarios'] })
+
+      queryClient.invalidateQueries({ queryKey: ['scenario-details'] })
+    },
+  })
+}
+

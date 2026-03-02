@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session,joinedload
 from sqlalchemy import func
 from fastapi import HTTPException, status
 from datetime import datetime, timezone
+import os
 from shared_orm.models.test_scenario import TestScenario
 from shared_orm.models.test_case import TestCase
 from shared_orm.models.page import Page
@@ -166,21 +167,39 @@ class ScenarioService:
     Raises 404 if not found.
     """
         logger.info(f"[DELETE_SCENARIO_REQUEST] ScenarioID={scenario_id}")
-        scenario = db.query(TestScenario).filter(
-        TestScenario.id == scenario_id
-    ).first()
-        if not scenario:
-            logger.warning(
-            f"[DELETE_SCENARIO_FAILED] Scenario not found | ScenarioID={scenario_id}"
-        )
+        try:
+
+            scenario = db.query(TestScenario).filter(TestScenario.id == scenario_id).first()
+            if not scenario:
+              
+              logger.warning(
+               f"[DELETE_SCENARIO_FAILED] Scenario not found | ScenarioID={scenario_id}")
+              raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Test Scenario not found")
+            if scenario.script_path:
+                try:
+                    if os.path.exists(scenario.script_path):
+                        os.remove(scenario.script_path)
+                        logger.info(f"[SCENARIO_SCRIPT_DELETE] path={scenario.script_path}")
+                    else:
+                        logger.warning(f"[SCENARIO_SCRIPT_NOT_FOUND] path={scenario.script_path}")
+                except Exception as file_error:
+                    logger.warning(f"[SCENARIO_SCRIPT_DELETE_FAILED] "f"path={scenario.script_path} error={file_error}")
+
+
+            db.query(TestCase).filter(
+            TestCase.test_scenario_id == scenario_id).delete()
+            db.delete(scenario)
+            db.commit()
+        except HTTPException:
+            raise
+        except Exception as e :
+            db.rollback()
+            logger.exception(
+            f"[DELETE_SCENARIO_ERROR] ScenarioID={scenario_id} Error={str(e)}")
             raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Test Scenario not found"
-        )
-        db.query(TestCase).filter(
-        TestCase.test_scenario_id == scenario_id).delete()
-        db.delete(scenario)
-        db.commit()
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete test scenario")
+        
         logger.info(f"[DELETE_SCENARIO_SUCCESS] ScenarioID={scenario_id}")
 
     def update_scenario(
@@ -237,8 +256,64 @@ class ScenarioService:
             "updated_by": scenario.updated_by,
         }
     
+    def regenerate_scenarios_for_page(
+        self,
+        db: Session,
+        page_id: int,
+        user: User,
+    ):
+        """
+        Regenerate test scenarios for a given page.
+        Steps:
+        1. Validate page exists
+        2. Delete existing scenarios and related test case
+        3. Publish TEST_SCENARIO_QUEUE event
+        """
+        logger.info(
+        f"[REGENERATE_SCENARIOS_REQUEST] PageID={page_id} RequestedBy={user.id}"
+        )
 
+        try:
+            page = db.query(Page).filter(Page.id == page_id).first()
+            if not page:
+                logger.warning(
+                 f"[REGENERATE_SCENARIOS_FAILED] Page not found | PageID={page_id}"
+                )
+                raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Page not found"
+                )
+            
+            scenarios = db.query(TestScenario).filter(TestScenario.page_id == page_id).all()
 
+            if scenarios:
+                 scenario_ids = [s.id for s in scenarios]
+                 for scenario in scenarios:
+                     if scenario.script_path:
+                         try:
+                             if os.path.exists(scenario.script_path):
+                                 os.remove(scenario.script_path)
+                                 logger.info(
+                                f"[SCENARIO_SCRIPT_DELETE] path={scenario.script_path}"
+                            )
+                         except Exception as file_error:
+                             logger.warning(
+                            f"[SCENARIO_SCRIPT_DELETE_FAILED] path={scenario.script_path} error={file_error}"
+                        )
+                         
+                 db.query(TestCase).filter(TestCase.test_scenario_id.in_(scenario_ids)).delete(synchronize_session=False)
+                 db.query(TestScenario).filter(TestScenario.id.in_(scenario_ids)).delete(synchronize_session=False)
+            db.commit()
+        except HTTPException:
+            raise
+        except Exception as e:
+             db.rollback()
+             logger.exception(f"[REGENERATE_SCENARIOS_ERROR] PageID={page_id} Error={str(e)}")
+             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                  detail="Failed to regenerate test scenarios")
+        logger.info(
+        f"[REGENERATE_SCENARIOS_SUCCESS] PageID={page_id}")
+        return page
         
         
             

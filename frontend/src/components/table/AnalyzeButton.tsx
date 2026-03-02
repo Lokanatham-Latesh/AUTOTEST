@@ -17,7 +17,7 @@ export function AnalyzeButton({ status, onPlay }: AnalyzeButtonProps) {
   return (
     <button
       onClick={onPlay}
-      className="mx-auto flex items-center justify-center text-primary hover:scale-110 transition"
+      className="mx-auto flex items-center justify-center text-primary hover:scale-110 transition cursor-pointer"
     >
       <Play size={18} />
     </button>
