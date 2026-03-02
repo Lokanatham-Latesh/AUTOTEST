@@ -1,4 +1,4 @@
-import type { GetScenariosParams, GetScenariosResponse, ScenarioDetailResponse, ScenarioUpdateResponse, UpdateScenarioPayload } from '@/types/scenario'
+import type { GetScenariosParams, GetScenariosResponse, ScenarioDetailResponse, ScenarioScriptResponse, ScenarioUpdateResponse, UpdateScenarioPayload } from '@/types/scenario'
 import api from '../axios'
 
 export const scenarioApi = {
@@ -34,6 +34,10 @@ export const scenarioApi = {
 
   regenerateScenarios: async (pageId: number): Promise<{ message: string }> => {
     const { data } = await api.post(`/scenarios/${pageId}/regenerate-scenarios`)
+    return data
+  },
+  getScenarioScript: async (scenarioId: number): Promise<ScenarioScriptResponse> => {
+    const { data } = await api.get(`/scenarios/${scenarioId}/test-script`)
     return data
   },
 }

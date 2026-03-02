@@ -123,3 +123,11 @@ def regenerate_scenarios(
         5,
     )
     return {"message": "Test scenario regeneration triggered"}
+
+@router.get("/{scenario_id}/test-script")
+def get_test_script(
+    scenario_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required)
+):
+    return ScenarioService().get_scenario_script(db, scenario_id)

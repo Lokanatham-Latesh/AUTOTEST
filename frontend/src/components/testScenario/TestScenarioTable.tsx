@@ -7,6 +7,8 @@ import { useDeleteScenarioMutation, useScenarioDetails } from '@/utils/queries/s
 import { toast } from 'sonner'
 import { ConfirmModal } from '../common/ConfirmModal'
 import { TestScenarioSheetForm } from './TestScenarioSheetForm'
+import { ExecuteButton } from '../common/ExecuteButton'
+import { ViewTestScriptSheet } from './ViewTestScriptSheet'
 
 type Props = {
   data: Scenario[]
@@ -19,13 +21,26 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
 
   const [openModal, setOpenModal] = useState(false)
   const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null)
-
   const [editId, setEditId] = useState<number | null>(null)
   const [openSheet, setOpenSheet] = useState(false)
+  const [runningScenarioId, setRunningScenarioId] = useState<number | null>(null)
+  const [openScriptSheet, setOpenScriptSheet] = useState(false)
+  const [scriptScenarioId, setScriptScenarioId] = useState<number | null>(null)
 
   const deleteMutation = useDeleteScenarioMutation()
 
   const { data: scenarioDetail } = useScenarioDetails(editId ?? 0)
+  const handlePlay = (scenarioId: number) => {
+    console.log('Execute scenario:', scenarioId)
+
+    // temporary loader state
+    setRunningScenarioId(scenarioId)
+
+    // remove later when websocket logic added
+    setTimeout(() => {
+      setRunningScenarioId(null)
+    }, 2000)
+  }
 
   const columns: TableColumn<Scenario>[] = [
     {
@@ -58,6 +73,21 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
       width: 'w-[120px]',
       align: 'center',
       render: (row) => row.test_case_count,
+    },
+    {
+      key: 'execute',
+      header: 'Execute',
+      width: 'w-[120px]',
+      align: 'center',
+      render: (row) => (
+        <div className="flex justify-center items-center">
+          <ExecuteButton
+            scenarioId={row.id}
+            isRunning={runningScenarioId === row.id}
+            onPlay={() => handlePlay(row.id)}
+          />
+        </div>
+      ),
     },
   ]
 
@@ -93,6 +123,14 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
         setOpenSheet(true)
       },
     },
+    {
+      label: 'View Test Script',
+      onClick: (row) => {
+        setScriptScenarioId(row.id)
+        setOpenScriptSheet(true)
+      },
+    },
+    
     {
       label: 'Delete scenario',
       destructive: true,
@@ -131,6 +169,15 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
           initialData={scenarioDetail}
         />
       )}
+
+      <ViewTestScriptSheet
+        open={openScriptSheet}
+        onOpenChange={(value) => {
+          setOpenScriptSheet(value)
+          if (!value) setScriptScenarioId(null)
+        }}
+        scenarioId={scriptScenarioId}
+      />
     </>
   )
 }

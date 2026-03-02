@@ -45,7 +45,6 @@ export const useDeleteScenarioMutation = () => {
   })
 }
 
-
 export const useUpdateScenarioMutation = () => {
   const queryClient = useQueryClient()
 
@@ -76,3 +75,10 @@ export const useRegenerateScenariosMutation = () => {
   })
 }
 
+export const useScenarioScriptQuery = (scenarioId: number | null) => {
+  return useQuery({
+    queryKey: ['scenario-script', scenarioId],
+    queryFn: () => scenarioApi.getScenarioScript(scenarioId!),
+    enabled: !!scenarioId,
+  })
+}
