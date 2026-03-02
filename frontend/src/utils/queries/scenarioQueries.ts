@@ -82,3 +82,9 @@ export const useScenarioScriptQuery = (scenarioId: number | null) => {
     enabled: !!scenarioId,
   })
 }
+
+export const useRegenerateTestCasesMutation = () => {
+  return useMutation({
+    mutationFn: (scenarioId: number) => scenarioApi.regenerateTestCasesForScenario(scenarioId),
+  })
+}

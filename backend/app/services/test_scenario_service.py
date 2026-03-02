@@ -338,3 +338,25 @@ class ScenarioService:
         "title": scenario.title,
         "script": scenario.script 
         }
+    def regenerate_test_cases_for_scenario(
+        self,
+        db: Session,
+        scenario_id: int,
+        user: User,
+    ):
+        """
+       Trigger test case regeneration for a specific scenario.
+       Fetch page_id internally from DB.
+       """
+        scenario = (db.query(TestScenario).filter(TestScenario.id == scenario_id).first())
+
+        if not scenario:
+            raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test Scenario not found"
+            )
+        return {
+        "page_id": scenario.page_id,
+        "scenario_id": scenario.id,
+        }
+    

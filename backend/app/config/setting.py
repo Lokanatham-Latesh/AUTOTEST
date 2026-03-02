@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     TEST_SCRIPT_QUEUE: str
     SCENARIO_RERUN_QUEUE: str
     TEST_EXECUTION_QUEUE: str
+    TEST_CASE_QUEUE: str
     PAGE_STATUS_UPDATE_QUEUE: str
     TEST_SCENARIO_QUEUE: str
 

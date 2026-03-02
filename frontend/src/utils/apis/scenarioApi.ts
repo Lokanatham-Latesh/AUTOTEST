@@ -40,6 +40,10 @@ export const scenarioApi = {
     const { data } = await api.get(`/scenarios/${scenarioId}/test-script`)
     return data
   },
+  regenerateTestCasesForScenario: async (scenarioId: number): Promise<{ message: string }> => {
+    const { data } = await api.post(`/scenarios/${scenarioId}/regenerate-test-cases`)
+    return data
+  },
 }
 
 
