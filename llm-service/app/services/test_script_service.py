@@ -2,7 +2,7 @@ import json
 import os
 import re
 from datetime import datetime
-
+from pathlib import Path
 from app.config.database import SessionLocal
 from shared_orm.models.test_scenario import TestScenario
 
@@ -204,16 +204,20 @@ class TestScriptService:
                 return "", None, None
 
             # Write script to disk
-            script_dir = "test_scripts"
-            os.makedirs(script_dir, exist_ok=True)
+            BASE_DIR = Path(__file__).resolve().parents[2]
+            SCRIPT_DIR = BASE_DIR / "test_scripts"
+            SCRIPT_DIR.mkdir(parents=True, exist_ok=True)
 
             timestamp      = datetime.now().strftime("%Y%m%d_%H%M%S")
+
             sanitized_name = re.sub(r"[^a-zA-Z0-9\-_]", "_", test_case["name"])
             sanitized_name = re.sub(r"_+", "_", sanitized_name).strip("_")
 
-            ext         = ".py" if "```python" in script_content else ".java"
-            filename    = f"test_{timestamp}_{sanitized_name}{ext}"
-            script_path = os.path.join(script_dir, filename)
+            ext = ".py" if "```python" in script_content else ".java"
+
+            filename  = f"test_{timestamp}_{sanitized_name}{ext}"
+
+            script_path = SCRIPT_DIR / filename
 
             with open(script_path, "w") as f:
                 f.write(code)
