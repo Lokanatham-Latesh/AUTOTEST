@@ -174,7 +174,7 @@ export const router = createBrowserRouter([
             path: 'page-info/',
             element: <PageInfoWrapper />,
             handle: {
-              sidebarId: 'page-info',
+              // sidebarId: 'page-info',
               title: 'Page Info',
             },
             children: [
@@ -190,7 +190,7 @@ export const router = createBrowserRouter([
                 path: ':id/test-scenario',
                 element: <TestScenario />,
                 handle: {
-                  sidebarId: 'page-info',
+                  sidebarId: 'test-scenario',
                   title: 'Test Scenarios',
                 },
               },
@@ -198,7 +198,7 @@ export const router = createBrowserRouter([
                 path: ':id/configuration',
                 element: <Configration />,
                 handle: {
-                  sidebarId: 'page-info',
+                  sidebarId: 'configuration',
                   title: 'Configuration',
                 },
               },
@@ -206,7 +206,7 @@ export const router = createBrowserRouter([
                 path: ':id/schedule',
                 element: <Scheduled />,
                 handle: {
-                  sidebarId: 'page-info',
+                  sidebarId: 'schedule-test',
                   title: 'Schedule',
                 },
               },
