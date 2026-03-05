@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     TEST_SCRIPT_QUEUE: str
 
 
+    PAGE_AUTH_UPDATE_QUEUE: str
+    AUTH_CREDENTIAL_UPDATE_QUEUE: str
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

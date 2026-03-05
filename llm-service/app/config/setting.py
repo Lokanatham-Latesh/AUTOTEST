@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     LLM_QUEUE: str
     SCENARIO_RERUN_QUEUE: str
     PAGE_STATUS_UPDATE_QUEUE :str
-    
+    PAGE_AUTH_UPDATE_QUEUE: str
+    AUTH_CREDENTIAL_UPDATE_QUEUE: str
     PAGE_CRAWL_MAX_DEPTH: int = 2
     PAGE_CRAWL_UNLIMITED: bool = False
 

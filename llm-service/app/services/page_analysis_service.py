@@ -431,7 +431,7 @@ class PageAnalysisService:
             submit_selector = auth_data.get("submit_selector")
 
             if not username_selector or not password_selector or not submit_selector:
-                self.logger.error("[AUTH] Missing required selectors from LLM")
+                self.logger.error(f"[AUTH] Missing required selectors from LLM, Username selector: {username_selector}, Password selector: {password_selector}, Submit selector: {submit_selector}")
                 return False
 
             username_field = wait.until(

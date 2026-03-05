@@ -6,6 +6,8 @@ from app.schemas.page_schema import PaginatedPageResponse,PageInfoResponse, Page
 from app.services.page_service import PageService
 from app.middleware.auth_middleware import auth_required
 from shared_orm.models.user import User
+from app.config.logger import logger
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/pages", tags=["Pages"])
 page_service = PageService()
@@ -95,6 +97,7 @@ def update_page_title(
         db=db,
         user=current_user
     )
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
@@ -111,9 +114,19 @@ async def create_page(
         db=db,
         user=current_user
     )
-
-
-
-
-
-
+        
+@router.post(
+    "/process-auth-update",
+    summary="Process auth credential update for pages",
+)
+async def auth_credential_update(           # ← must be async def
+    page_id: int = Query(..., description="ID of the site for which auth credentials were updated"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required),
+):
+    result = await page_service.auth_credential_update(   # ← await
+        page_id=page_id,
+        db=db,
+        user=current_user,
+    )
+    return result
