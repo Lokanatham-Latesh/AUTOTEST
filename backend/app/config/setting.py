@@ -36,7 +36,9 @@ class Settings(BaseSettings):
     TEST_EXECUTION_QUEUE: str
     PAGE_STATUS_UPDATE_QUEUE: str
     TEST_SCENARIO_QUEUE: str
-
+    PAGE_AUTH_UPDATE_QUEUE: str
+    AUTH_CREDENTIAL_UPDATE_QUEUE: str
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

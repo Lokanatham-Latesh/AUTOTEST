@@ -277,7 +277,7 @@ class WorkerService:
         db.commit()
         return has_auth
 
-    async def _perform_login_and_discover(self, db, test_case, requested_by: int):
+    async def _perform_login_and_discover(self, body: dict):
         """
         1. Resolve credentials for the login test case.
         2. Drive Selenium to log in.
@@ -285,6 +285,15 @@ class WorkerService:
         4. Save landing URL on the test case record.
         5. Emit PAGE_EXTRACT_SINGLE only if the landing URL is new.
         """
+        db = SessionLocal()
+        test_case_id = body["test_case_id"]
+        requested_by = body["requested_by"]
+
+        test_case = db.query(TestCase).filter(TestCase.id == test_case_id).first()
+        if not test_case:
+            logger.warning(f"[AUTH] Test case not found | TestCaseID={test_case_id}")
+            return
+
         page = db.query(Page).filter(Page.id == test_case.page_id).first()
         if not page:
             return
@@ -294,17 +303,25 @@ class WorkerService:
         prompt_manager = PromptManager()
         cred_service   = TestCredentialService(llm=llm, logger=logger)
 
+    
         try:
             resolved = cred_service.resolve(page.id, test_case.data.get("test_data", {}))
 
             username = None
             password = None
+
             for key, value in resolved.items():
-                if "email" in key.lower() or "username" in key.lower():
+                if "txtName" in key or "email" in key.lower() or "username" in key.lower():
                     username = value
-                if "password" in key.lower():
+                if "txtPassword" in key or "password" in key.lower():
                     password = value
 
+                # if "email" in key.lower() or "username" in key.lower() or "txtName" in key.lower():
+                #     username = value
+                # if "password" in key.lower() or "txtPassword" in key.lower():
+                #     password = value
+
+            
             if not username or not password:
                 logger.warning("[AUTH] Missing credentials — skipping login")
                 return
@@ -635,7 +652,12 @@ class WorkerService:
             login_test_case = self._get_login_test_case(db, page_id)
             if login_test_case:
                 logger.info(f"[AUTH] Login test case detected | page_id={page_id}")
-                await self._perform_login_and_discover(db, login_test_case, requested_by)
+
+                body = {
+                    "test_case_id": login_test_case.id,
+                    "requested_by": requested_by
+                }
+                await self._perform_login_and_discover(body)
 
             await rabbitmq_producer.publish_message(
                 settings.TEST_SCRIPT_QUEUE,
