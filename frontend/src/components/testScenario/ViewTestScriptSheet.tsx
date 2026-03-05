@@ -1,8 +1,14 @@
-import { RotateCcw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { RotateCcw, Loader2 } from 'lucide-react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { useScenarioScriptQuery } from '@/utils/queries/scenarioQueries'
+import {
+  useScenarioScriptQuery,
+  useRegenerateTestScriptsMutation,
+} from '@/utils/queries/scenarioQueries'
 import { useQueryClient } from '@tanstack/react-query'
+import { useWebSocketContext } from '@/contexts/WebSocketProvider'
+import { toast } from 'sonner'
 
 type Props = {
   open: boolean
@@ -12,19 +18,49 @@ type Props = {
 
 export function ViewTestScriptSheet({ open, onOpenChange, scenarioId }: Props) {
   const queryClient = useQueryClient()
+  const { lastMessage } = useWebSocketContext()
 
   const { data, isLoading, isError, isFetching } = useScenarioScriptQuery(open ? scenarioId : null)
 
-  const handleRegenerate = async () => {
-    if (!scenarioId) return
+  const { mutate: regenerateScript } = useRegenerateTestScriptsMutation()
 
-    //  Later call regenerate API here
+  const [isRegenerating, setIsRegenerating] = useState(false)
 
-    // For now just refetch script
-    queryClient.invalidateQueries({
-      queryKey: ['scenario-script', scenarioId],
+
+  const handleRegenerate = () => {
+    if (!scenarioId || isRegenerating) return
+
+    setIsRegenerating(true)
+
+    regenerateScript(scenarioId, {
+      onError: () => {
+        toast.error('Failed to start script regeneration')
+        setIsRegenerating(false)
+      },
     })
   }
+
+
+  useEffect(() => {
+    if (!lastMessage) return
+    if (lastMessage.type !== 'PAGE_STATUS_UPDATE') return
+
+    const { scenario_id, status } = lastMessage.payload
+
+    if (scenario_id !== scenarioId) return
+
+    if (status === 'done') {
+      setIsRegenerating(false)
+
+      queryClient.invalidateQueries({
+        queryKey: ['scenario-script', scenarioId],
+      })
+
+      toast.success('Test script generation completed')
+    } else if (status === 'generating_test_scripts') {
+      setIsRegenerating(true)
+    }
+  }, [lastMessage, scenarioId, queryClient])
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -64,11 +100,20 @@ export function ViewTestScriptSheet({ open, onOpenChange, scenarioId }: Props) {
           <Button
             variant="ghost"
             onClick={handleRegenerate}
-            disabled={isFetching}
-            className="text-red-600 hover:text-red-700 cursor-pointer"
+            disabled={isRegenerating}
+            className="text-red-600 hover:text-red-700 cursor-pointer flex items-center gap-2"
           >
-            <RotateCcw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
-            Regenerate Test Script
+            {isRegenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <RotateCcw className="h-4 w-4" />
+                Regenerate Test Script
+              </>
+            )}
           </Button>
 
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">

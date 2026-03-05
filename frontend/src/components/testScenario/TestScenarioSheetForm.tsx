@@ -53,6 +53,7 @@ export function TestScenarioSheetForm({ open, onOpenChange, initialData }: Props
     control,
     name: 'steps',
   })
+  const isEditMode = !!initialData
 
   // Populate form when editing
   useEffect(() => {
@@ -120,7 +121,7 @@ export function TestScenarioSheetForm({ open, onOpenChange, initialData }: Props
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex h-full w-[520px] flex-col p-0">
         <SheetHeader className="border-b px-6 py-4">
-          <SheetTitle>Edit Test Scenario</SheetTitle>
+          <SheetTitle>{isEditMode ? 'Edit Test Scenario' : 'Add Test Scenario'}</SheetTitle>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(submitHandler)} className="flex h-full flex-col">

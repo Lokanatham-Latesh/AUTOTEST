@@ -88,3 +88,8 @@ export const useRegenerateTestCasesMutation = () => {
     mutationFn: (scenarioId: number) => scenarioApi.regenerateTestCasesForScenario(scenarioId),
   })
 }
+export const useRegenerateTestScriptsMutation = () => {
+  return useMutation({
+    mutationFn: (scenarioId: number) => scenarioApi.regenerateTestScriptsForScenario(scenarioId),
+  })
+}

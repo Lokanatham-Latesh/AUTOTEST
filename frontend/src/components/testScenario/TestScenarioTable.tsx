@@ -36,17 +36,15 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
   const [openScriptSheet, setOpenScriptSheet] = useState(false)
   const [scriptScenarioId, setScriptScenarioId] = useState<number | null>(null)
 
-  // ✅ Track multiple running scenarios
+  //  Track multiple running scenarios
   const [runningScenarioIds, setRunningScenarioIds] = useState<number[]>([])
 
-  /* ---------------- QUERIES ---------------- */
 
   const deleteMutation = useDeleteScenarioMutation()
   const { data: scenarioDetail } = useScenarioDetails(editId ?? 0)
 
   const { mutate: regenerateTestCases } = useRegenerateTestCasesMutation()
 
-  /* ---------------- EXECUTE ---------------- */
 
   const handlePlay = (scenarioId: number) => {
     if (runningScenarioIds.includes(scenarioId)) return
@@ -62,7 +60,6 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
     })
   }
 
-  /* ---------------- WEBSOCKET ---------------- */
 
   useEffect(() => {
     if (!lastMessage) return
@@ -72,16 +69,16 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
 
     if (!scenario_id) return
 
-    // If generation is ongoing → ensure loader is active
     if (status !== 'done') {
       setRunningScenarioIds((prev) => (prev.includes(scenario_id) ? prev : [...prev, scenario_id]))
     }
 
-    // If done → remove loader
     if (status === 'done') {
       setRunningScenarioIds((prev) => prev.filter((id) => id !== scenario_id))
 
-      toast.success(`Scenario ${scenario_id} completed`)
+      if (!openScriptSheet || scriptScenarioId !== scenario_id){
+        toast.success(`test case for scenario  ${scenario_id} completed`)
+      }
     }
   }, [lastMessage])
 
@@ -135,7 +132,6 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
     },
   ]
 
-  /* ---------------- ACTIONS ---------------- */
 
   const actions: TableAction<Scenario>[] = [
     {
@@ -187,7 +183,6 @@ export function TestScenarioTable({ data, parentId, isSiteRoute }: Props) {
     })
   }
 
-  /* ---------------- RENDER ---------------- */
 
   return (
     <>

@@ -338,7 +338,7 @@ class ScenarioService:
         "title": scenario.title,
         "script": scenario.script 
         }
-    def regenerate_test_cases_for_scenario(
+    def get_scenario_and_page(
         self,
         db: Session,
         scenario_id: int,

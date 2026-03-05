@@ -3,10 +3,10 @@ import { useParams, useLocation } from 'react-router-dom'
 import { useScenariosQuery } from '@/utils/queries/scenarioQueries'
 import { TestScenarioTable } from './TestScenarioTable'
 import { SearchBar } from '../common/SearchBar'
-import { Button } from '../ui/button'
+// import { Button } from '../ui/button'
 import { Pagination } from '../common/Pagination'
 import type { SortType } from '@/types'
-import { TestScenarioSheetForm } from './TestScenarioSheetForm'
+// import { TestScenarioSheetForm } from './TestScenarioSheetForm'
 
 const TestScenario = () => {
   const { id } = useParams<{ id: string }>()
@@ -19,7 +19,7 @@ const TestScenario = () => {
   const [sort, setSort] = useState<SortType>('created_desc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  const [openAdd, setOpenAdd] = useState(false)
+  // const [openAdd, setOpenAdd] = useState(false)
 
   const { data, isLoading } = useScenariosQuery({
     page,
@@ -44,11 +44,15 @@ const TestScenario = () => {
           setPage(1)
         }}
       >
-        <Button onClick={() => setOpenAdd(true)} className="cursor-pointer">
-          Add Test Scenario
-        </Button>
+        {/* {isPageRoute && (
+          <>
+            <Button onClick={() => setOpenAdd(true)} className="cursor-pointer">
+              Add Test Scenario
+            </Button>
 
-        <TestScenarioSheetForm open={openAdd} onOpenChange={setOpenAdd} />
+            <TestScenarioSheetForm open={openAdd} onOpenChange={setOpenAdd} />
+          </>
+        )} */}
       </SearchBar>
 
       {isLoading ? (
