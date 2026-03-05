@@ -156,7 +156,7 @@ class WorkerService:
         db.flush()
         return page
 
-    async def _notify_ws(self, page: Page, requested_by: int):
+    async def _notify_ws(self, page: Page, requested_by: int,scenario_id: int | None = None):
           
         """
           Publish PAGE_STATUS_UPDATE event to RabbitMQ.
@@ -170,24 +170,31 @@ class WorkerService:
               db = SessionLocal()
               scenario_count = (db.query(TestScenario).filter(TestScenario.page_id == page.id).count() )
               test_case_count = (db.query(TestCase).filter(TestCase.page_id == page.id).count())
-              
+
+              payload = {
+            "page_id": page.id,
+            "page_url": page.page_url,
+            "site_id": page.site_id,
+            "page_title": page.page_title,
+            "status": page.status,
+            "test_scenario_count": scenario_count,
+            "test_case_count": test_case_count,
+            "updated_on": (
+                page.updated_on.isoformat()
+                if page.updated_on
+                else None
+            ),
+        }
+              if scenario_id is not None:
+                  logger.info(f"[WS_NOTIFY] Received with  scenario_id = {scenario_id} ")
+                  payload["scenario_id"] = scenario_id
+
               message = {
                 "event": "PAGE_STATUS_UPDATE",
-                "payload": {
-                "page_id": page.id,
-                "page_url": page.page_url,
-                "site_id": page.site_id,
-                "page_title": page.page_title,
-                "status": page.status,
-                "test_scenario_count": scenario_count,
-                "test_case_count": test_case_count,
-                "updated_on": (
-                    page.updated_on.isoformat()
-                    if page.updated_on
-                    else None
-                ),
-            },
-        }
+                "payload": payload,
+                }
+              
+                   
               await rabbitmq_producer.publish_message(settings.PAGE_STATUS_UPDATE_QUEUE,message)
               logger.info(
                 f"[WS_NOTIFY] Published PAGE_STATUS_UPDATE | "
@@ -616,7 +623,7 @@ class WorkerService:
 
             self._set_page_status(db, page, PageStatus.GENERATING_TEST_CASES, requested_by)
             db.commit()
-            await self._notify_ws(page, requested_by)
+            await self._notify_ws(page, requested_by, scenario_id)
 
             loop = asyncio.get_running_loop()
 
@@ -705,7 +712,7 @@ class WorkerService:
 
             self._set_page_status(db, page, PageStatus.GENERATING_TEST_SCRIPTS, requested_by)
             db.commit()
-            await self._notify_ws(page, requested_by)
+            await self._notify_ws(page, requested_by, scenario_id)
 
             # Guard — need at least one scenario
             scenario_q = db.query(TestScenario).filter(TestScenario.page_id == page_id)
@@ -753,7 +760,7 @@ class WorkerService:
                 logger.info(f"[TEST_SCRIPT] Site paused after generation — page_id={page_id}")
                 return
 
-            await self._finalize_page(db, page, requested_by)
+            await self._finalize_page(db, page, requested_by, scenario_id)
 
             logger.info(f"[TEST_SCRIPT] Completed | page_id={page_id}")
 
@@ -764,11 +771,11 @@ class WorkerService:
         finally:
             db.close()
 
-    async def _finalize_page(self, db, page: Page, requested_by: int):
+    async def _finalize_page(self, db, page: Page, requested_by: int , scenario_id: int | None = None):
         """Mark page as done, notify WS, emit TEST_EXECUTION."""
         self._set_page_status(db, page, PageStatus.DONE, requested_by)
         db.commit()
-        await self._notify_ws(page, requested_by)
+        await self._notify_ws(page, requested_by, scenario_id)
 
         await rabbitmq_producer.publish_message(
             settings.TEST_EXECUTION_QUEUE,
@@ -840,7 +847,7 @@ class WorkerService:
             # Notify WebSocket — page execution finished
             # Re-fetch page to get latest state for the WS payload
             db.refresh(page)
-            await self._notify_ws(page, requested_by)
+            await self._notify_ws(page, requested_by, scenario_id)
 
         except Exception:
             logger.exception("[TEST_EXECUTION] Failed")
