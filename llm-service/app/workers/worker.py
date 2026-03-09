@@ -207,6 +207,9 @@ class WorkerService:
             f"[WS_NOTIFY] FAILED to publish PAGE_STATUS_UPDATE | "
             f"page_id={page.id} | status={page.status} | error={e}"
         )
+        
+        finally:
+            db.close()
 
     def _get_login_test_case(self, db, page_id: int):
         """
@@ -408,6 +411,9 @@ class WorkerService:
             base_domain = urlparse(landing_url).netloc
 
             for url in auth_urls:
+                if url == landing_url:
+                    continue
+
                 parsed = urlparse(url)
                 if parsed.netloc != base_domain:
                     continue
@@ -1412,6 +1418,17 @@ class WorkerService:
                username=None,
                password=None,
                requested_by=requested_by
+            )
+            logger.info(f"[PIPELINE] Executing tests | page_id={page.id}")
+            TestExecutionService(
+                llm=LLMWrapper(),
+                prompt_manager=PromptManager(),
+                logger=logger,
+            ).execute_page(
+                page,
+                requested_by,
+                None,  
+                None   
             )
 
             page.status = PageStatus.DONE
