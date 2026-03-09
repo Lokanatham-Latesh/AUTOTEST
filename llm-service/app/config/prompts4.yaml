@@ -156,8 +156,30 @@ generate_tests:
 
     If authentication is present:
     - Generate both positive and negative test cases.
-    - Use placeholders like {{USERNAME}}, {{PASSWORD}}.
+    - Use credential placeholders in the following format:
+      {{VALID_EMAIL}}
+      {{INVALID_EMAIL}}
+      {{VALID_USER_NAME}}
+      {{INVALID_USER_NAME}}
+      {{VALID_PASSWORD}}
+      {{INVALID_PASSWORD}}
     - Do not generate real credentials.
+
+    If authentication fields exist on the page, selectors MUST follow this structure:
+    "selectors": {
+      "username": "css_selector_for_username_input",
+      "password": "css_selector_for_password_input",
+      "login_button": "css_selector_for_login_button"
+    }
+    Rules:
+     - Always use the keys: username, password, login_button
+     - Do not rename these keys
+     - Use selectors exactly from page_metadata
+     
+    If scenario.category is NOT "auth-positive":
+    - Do NOT assign is_valid_default = true to any test case.
+    - All generated test cases must have is_valid_default = false.
+
 
     If forms are present:
     - Cover required validation.
@@ -208,7 +230,18 @@ generate_tests:
     - Do NOT assume elements not present.
     - If a selector is missing, skip that specific test case.
     - Never hardcode real data values.
-    - Use placeholders like {{FIELD_NAME}}.
+    - Use placeholders strictly in this format:
+      {{VALID_FIELD_NAME}}
+      {{INVALID_FIELD_NAME}}
+
+      Examples:
+      {{VALID_EMAIL}}
+      {{INVALID_EMAIL}}
+      {{VALID_PASSWORD}}
+      {{INVALID_PASSWORD}}
+      {{VALID_USER_NAME}}
+      {{INVALID_USER_NAME}}
+      Do NOT use double curly braces like {{FIELD}}.
     - Output MUST be valid JSON.
     - Output JSON ONLY.
     - No explanations.
@@ -235,8 +268,13 @@ generate_tests:
           ],
 
           "selectors": {{
-            "element_name": "css_selector_or_xpath"
-          }},
+            "username": "css_selector_if_authentication",
+            "password": "css_selector_if_authentication",
+            "login_button": "css_selector_if_authentication",
+            "elements": {{
+              "element_name": "css_selector"
+            }}
+          }}
 
           "validation": "Human-readable expected result",
 
@@ -281,11 +319,34 @@ generate_tests:
           selectors and page structure.
         - Set to false if any required selector is missing, a step cannot be
           completed on this page, or the element does not exist in the HTML.
+
     12. For is_valid_default:
-        - Exactly ONE test case per scenario must have is_valid_default set to true.
-        - Choose the test case that best represents the core intent of the scenario
-          (typically the primary success flow or happy path).
-        - All other test cases must have is_valid_default set to false.
+        - is_valid_default must be true ONLY when the scenario category is "auth-positive".
+
+        - is_valid_default should be set to true ONLY for the test case that
+          represents a successful login using VALID credentials.
+
+        - The auth-positive test case that uses:
+          {{VALID_USER_NAME}} or {{VALID_EMAIL}}
+          and {{VALID_PASSWORD}}
+          should be marked as is_valid_default = true.
+
+        - All other test cases MUST have:
+          is_valid_default = false
+
+        - All other test cases across all scenarios must have
+          is_valid_default set to false.
+
+        - Never assign is_valid_default = true for:
+          validation
+          navigation
+          ui-validation
+          auth-negative
+          functional
+          or any other category.
+
+       - There must be at most ONE test case with is_valid_default = true
+         in the generated results.
 
 generate_script:
   selenium:
@@ -794,7 +855,7 @@ requires_auth:
     Partial HTML: {page_html}
 
 auth_form_selectors:
-  system: "You are a web form analyzer. Return JSON with auth form selectors and field types."
+  system: "You are a web form analyzer. Returnlogin_state_check JSON with auth form selectors and field types."
   user: |
     Extract auth form selectors as JSON:
     {{
@@ -1020,3 +1081,27 @@ generate_test_scenarios:
     6. Include form scenarios for each detected form
     7. Do not duplicate scenarios
     8. Return JSON only
+login_state_check:
+  system: |
+    You are a classifier that determines whether a user is logged in based on page HTML.
+
+    Analyze the HTML after a login attempt.
+
+    If the user appears logged in (dashboard, welcome message, logout link, success message),
+    return JSON:
+
+    {"logged_in": true}
+
+    If the page still shows a login form or error message, return JSON:
+
+    {"logged_in": false}
+
+    Return ONLY valid JSON.
+    Do not include explanations.
+
+  user: |
+    HTML:
+    {page_html}
+
+    Determine if the user is logged in.
+    Return the result as JSON only.

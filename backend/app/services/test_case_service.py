@@ -1,11 +1,14 @@
 from datetime import datetime,timezone
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
-
+import json
+import anyio
 from shared_orm.models.test_case import TestCase
 from shared_orm.models.test_scenario import TestScenario
 from shared_orm.models.user import User
 from app.config.logger import logger
+from app.services.page_service import PageService
+page_service = PageService()
 
 
 class TestCaseService:
@@ -202,7 +205,73 @@ class TestCaseService:
         logger.info(
             f"[UPDATE_TEST_CASE_SUCCESS] TestCaseID={test_case_id} UpdatedBy={user.id}"
         )
+        # ------------------------------------------------------
+        # LOGIN CREDENTIAL DETECTION
+        # ------------------------------------------------------
+        try:
+            # Only proceed if default valid login test case
+            if not test_case.is_valid_default:
+                return test_case
+            
+            data_json = test_case.data
+            
+            if not data_json:
+                return test_case
+            
+            # Convert JSON string if needed
+            if isinstance(data_json, str):
+                data_json = json.loads(data_json)
+            
+            selectors = data_json.get("selectors", {})
+            test_data = data_json.get("test_data", {})
 
+            username_selector = selectors.get("username")
+            password_selector = selectors.get("password")
+
+            username_value = None
+            password_value = None
+
+            if username_selector:
+                username_key = username_selector.replace("#", "")
+                username_value = test_data.get(username_key)
+
+            if password_selector:
+                password_key = password_selector.replace("#", "")
+                password_value = test_data.get(password_key)
+            
+            # -----------------------------
+            # Credential validation
+            # -----------------------------
+            def is_valid_credential(value: str) -> bool:
+                if not value:
+                    return False
+                
+                value = str(value).strip()
+
+                if value == "":
+                    return False
+                
+                if value.startswith("{") and value.endswith("}"):
+                    return False
+                
+                return True
+            
+            if is_valid_credential(username_value) and is_valid_credential(password_value):
+
+                logger.info(
+                f"[AUTH_CREDENTIAL_DETECTED] Valid credentials found | TestCaseID={test_case.id}"
+                )
+                anyio.from_thread.run(
+                  page_service.auth_credential_update,
+                  test_case.page_id,
+                  db,
+                  user
+                )
+            
+        except Exception as e:
+            logger.warning(
+            f"[AUTH_CREDENTIAL_CHECK_FAILED] TestCaseID={test_case.id} Error={str(e)}"
+            )
         return test_case
     # -------------------------------
     # Delete Test Case

@@ -130,6 +130,7 @@ class TestCredentialService:
         """
         # Test cases with no test_data (e.g. UI interaction only) exit immediately
         if not test_data:
+            self.logger.debug(f"[CREDENTIAL] No test_data provided for page {page_id}")
             return {}
 
         # Collect all placeholder keys referenced in this test_data

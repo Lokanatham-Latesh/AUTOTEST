@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { List, Database, Calendar } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+// import { Button } from '@/components/ui/button'
 import { useQueryClient } from '@tanstack/react-query'
 import { useWebSocketContext } from '@/contexts/WebSocketProvider'
 import { mapPageStatusToAnalyzeStatus } from '@/utils/statusMapper'
@@ -107,14 +107,14 @@ useEffect(() => {
               <StatusDots status={analyzeStatus} />
             </div>
 
-            {analyzeStatus === 'Processing' && (
+            {/* {analyzeStatus === 'Processing' && (
               <Button
                 variant="outline"
                 className="border-[#E63B3B] text-[#E63B3B] hover:bg-[#FFF0F0]"
               >
                 View Logs
               </Button>
-            )}
+            )} */}
           </div>
         </div>
 

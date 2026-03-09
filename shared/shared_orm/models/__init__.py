@@ -14,3 +14,4 @@ from .provider import Provider
 from .provider_model import ProviderModel
 from .function import AppFunction
 from .function_provider_model import FunctionProviderModel
+from .test_case_credential import TestCaseCredential

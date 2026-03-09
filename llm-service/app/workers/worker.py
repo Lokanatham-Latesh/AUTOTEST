@@ -314,25 +314,40 @@ class WorkerService:
         try:
             resolved = cred_service.resolve(page.id, test_case.data.get("test_data", {}))
 
-            username = None
-            password = None
+            selectors = test_case.data.get("selectors", {})
+            username_selector = selectors.get("username")
+            password_selector = selectors.get("password")
 
-            for key, value in resolved.items():
-                if "txtName" in key or "email" in key.lower() or "username" in key.lower():
-                    username = value
-                if "txtPassword" in key or "password" in key.lower():
-                    password = value
+            def extract_field(selector):
+                """
+                 Extract field name from selector.
 
-                # if "email" in key.lower() or "username" in key.lower() or "txtName" in key.lower():
-                #     username = value
-                # if "password" in key.lower() or "txtPassword" in key.lower():
-                #     password = value
-
-            
+                Examples:
+                #txtName → txtName
+                input#user-name → user-name
+                input[name="email"] → email
+                """
+                import re
+                if not selector:
+                    return None
+                if selector.startswith("#"):
+                    return selector[1:]
+                if "#" in selector:
+                    return selector.split("#")[-1]
+                match = re.search(r'name=["\']([^"\']+)["\']', selector)
+                if match:
+                    return match.group(1)
+                return None
+            username_field = extract_field(username_selector)
+            password_field = extract_field(password_selector)
+            username = resolved.get(username_field)
+            password = resolved.get(password_field)
             if not username or not password:
-                logger.warning("[AUTH] Missing credentials — skipping login")
+                logger.warning(
+                f"[AUTH] Missing credentials | username_field={username_field}, password_field={password_field}"
+            )
                 return
-
+                
             driver.get(page.page_url)
 
             analyzer = PageAnalysisService(
@@ -353,27 +368,100 @@ class WorkerService:
             test_case.expected_outcome["post_auth_landing_url"] = landing_url
             db.commit()
 
-            # Only emit extract if the landing URL is genuinely new
-            if db.query(Page).filter(Page.page_url == landing_url).first():
-                logger.info(f"[AUTH] Landing page already known: {landing_url} — skipping")
-                return
+            # ---------------------------------------------
+            # Save landing page
+            # ---------------------------------------------
+            existing_page = db.query(Page).filter(
+                Page.site_id == page.site_id,
+                Page.page_url == landing_url
+            ).first()
 
-            logger.info(f"[AUTH] New post-auth landing page: {landing_url}")
-            await rabbitmq_producer.publish_message(
-                settings.PAGE_EXTRACT_SINGLE_QUEUE,
-                {
-                    "event":        "PAGE_EXTRACT_SINGLE_QUEUE",
-                    "site_id":      page.site_id,
-                    "extract_url":     landing_url,
-                    "page_id":      page.id,
-                    "requested_by": requested_by,
-                    "timestamp":    datetime.utcnow().isoformat(),
-                },
-                priority=6,
+            if existing_page:
+                landing_page = existing_page
+                logger.info(f"[AUTH] Landing page already exists: {landing_url}")
+            else :
+                landing_page = Page(
+                site_id=page.site_id,
+                page_url=landing_url,
+                page_title=None,
+                status="new",
+                is_auth_detected=True,
+                created_on=datetime.utcnow(),
+                created_by=requested_by
             )
+                db.add(landing_page)
+                db.commit()
+                db.refresh(landing_page)
+                logger.info(f"[AUTH] Created landing page record | id={landing_page.id}")
 
+            pages_to_process = [landing_page]
+            logger.info("[AUTH] Discovering authenticated URLs")
+
+            # ---------------------------------------------
+            # Discover authenticated URLs
+            # ---------------------------------------------
+
+            extractor = URLExtractor(driver, logger)
+
+            auth_urls = extractor.extract_urls(landing_url)
+            
+            base_domain = urlparse(landing_url).netloc
+
+            for url in auth_urls:
+                parsed = urlparse(url)
+                if parsed.netloc != base_domain:
+                    continue
+
+                if "logout" in url.lower() or "signout" in url.lower():
+                    continue
+
+                existing = db.query(Page).filter(Page.page_url == url).first()
+
+                if existing:
+                    pages_to_process.append(existing)
+                    continue
+
+                new_page = Page(
+                   site_id=page.site_id,
+                   page_url=url,
+                   status=PageStatus.NEW,
+                   is_auth_detected=True,
+                   created_on=datetime.utcnow(),
+                   created_by=requested_by
+                )
+
+                db.add(new_page)
+                db.commit()
+                db.refresh(new_page)
+
+                pages_to_process.append(new_page)
+
+            logger.info(f"[AUTH] Total authenticated pages discovered: {len(pages_to_process)}")
+
+            # ---------------------------------------------
+            # Parallel processing of pages
+            # ---------------------------------------------
+            loop = asyncio.get_running_loop()
+
+            tasks = []
+
+            for p in pages_to_process:
+                tasks.append(
+                    loop.run_in_executor(
+                        None,
+                        self._run_page_pipeline,
+                        driver,
+                        p,
+                        requested_by
+                    )
+                )
+            
+            await asyncio.gather(*tasks)
+            
         finally:
             driver.quit()
+            db.close()
+                
 
     # =========================================================================
     # STEP 1 — PAGE EXTRACT  (full site crawl, pipeline entry point)
@@ -1256,6 +1344,83 @@ class WorkerService:
 
         finally:
             db.close()
+    
+    def _run_page_pipeline(self, driver, page: Page, requested_by: int):
 
+        logger.info(f"[PIPELINE] Running pipeline | page_id={page.id}")
+        llm = LLMWrapper()
+        prompt_manager = PromptManager()
+
+        analyzer = PageAnalysisService(
+            driver=driver,
+            logger=logger,
+            llm=llm,
+            prompt_manager=prompt_manager
+        )
+
+        db = SessionLocal()
+
+        try:
+            # STEP 1 — ANALYZE PAGE
+            page.status = PageStatus.GENERATING_METADATA
+            db.commit()
+            asyncio.run(self._notify_ws(page, requested_by))
+
+            analyzer.analyze_page(
+                page_id=page.id,
+                page_url=page.page_url,
+                requested_by=requested_by
+            )
+
+            # STEP 2 — GENERATE SCENARIOS
+            page.status = PageStatus.GENERATING_TEST_SCENARIOS
+            db.commit()
+
+            asyncio.run(self._notify_ws(page, requested_by))
+
+            TestScenarioService(
+                llm=llm,
+                prompt_manager=prompt_manager,
+                logger=logger
+            ).generate(page.id, requested_by)
+
+            # STEP 3 — GENERATE TEST CASES
+            page.status = PageStatus.GENERATING_TEST_CASES
+            db.commit()
+
+            asyncio.run(self._notify_ws(page, requested_by))
+
+            TestCaseService(
+                llm=llm,
+                prompt_manager=prompt_manager,
+                logger=logger
+            ).generate(page.id, requested_by)
+
+            # STEP 4 — GENERATE TEST SCRIPTS
+            page.status = PageStatus.GENERATING_TEST_SCRIPTS
+            db.commit()
+
+            asyncio.run(self._notify_ws(page, requested_by))
+
+            TestScriptService(
+                llm=llm,
+                prompt_manager=prompt_manager,
+                logger=logger
+            ).generate_scripts_for_page(
+               page,
+               require_login=True,
+               username=None,
+               password=None,
+               requested_by=requested_by
+            )
+
+            page.status = PageStatus.DONE
+            db.commit()
+
+            asyncio.run(self._notify_ws(page, requested_by))
+        
+        finally:
+            db.close()
+        logger.info(f"[PIPELINE] Completed pipeline | page_id={page.id}")
 
 worker_service = WorkerService()

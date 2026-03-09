@@ -11,7 +11,7 @@ class Page(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # Optional foreign key to Site
     site_id: Mapped[int | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
-    page_url: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    page_url: Mapped[str] = mapped_column(String(512), nullable=False, unique=False)
     status: Mapped[str] = mapped_column(PageStatusEnum, nullable=False, default="new")
     page_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     page_source: Mapped[str | None] = mapped_column(Text, nullable=True)
