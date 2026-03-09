@@ -24,11 +24,21 @@ class PageAnalysisService:
         self.prompt_manager = prompt_manager
 
     def analyze_page(self, page_id: int, page_url: str, requested_by: str):
+        
         self.logger.info(f"[PAGE_ANALYSE] Loading {page_url}")
 
-        self.driver.get(page_url)
+        self.logger.info(f"[PAGE_ANALYSE] Current URL before analysis: {self.driver.current_url}")
+
+        self.logger.debug(f"[PAGE_ANALYSE] Updating Page ID: {page_id}")
+        if self.driver.current_url != page_url:
+            self.driver.get(page_url)
+
+        WebDriverWait(self.driver, 10).until(
+        EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         page_source = self.driver.page_source
+        self.logger.debug(f"[PAGE_ANALYSE] Page title: {self.driver.title}")
+        self.logger.debug(f"[PAGE_ANALYSE] Page HTML length: {len(page_source)}")
         minimized_html = self.extract_test_relevant_html(page_source) # fetch page source
 
         static_metadata = {
@@ -47,18 +57,21 @@ class PageAnalysisService:
             **static_metadata,
             **llm_metadata
         }
-
         with SessionLocal() as db:
             page = db.query(Page).filter(Page.id == page_id).first()
+            if not page:
+                self.logger.error(f"[PAGE_ANALYSE] Page record not found for id={page_id}")
+                return
 
             page.page_title = self.driver.title
             page.page_source = minimized_html
             page.page_metadata = page_metadata
-            page.status = "processed"
+            page.status = "generating_test_scenarios"
             page.updated_on = datetime.utcnow()
             page.updated_by = requested_by
-
+            db.flush()
             db.commit()
+            self.logger.info(f"[PAGE_ANALYSE] Page metadata stored | page_id={page_id}")
             self._save_page_links(
                 db=db,
                 source_page=page,
@@ -107,6 +120,7 @@ class PageAnalysisService:
 
             db.add(link)
 
+        db.flush()
         db.commit()
 
     def extract_test_relevant_html(self, page_source):
@@ -390,6 +404,7 @@ class PageAnalysisService:
             raise ValueError("Credentials required for authentication")
 
         try:
+            
             self.logger.debug("[AUTH] Authentication started")
 
             wait = WebDriverWait(self.driver, 15)
@@ -433,6 +448,11 @@ class PageAnalysisService:
             if not username_selector or not password_selector or not submit_selector:
                 self.logger.error(f"[AUTH] Missing required selectors from LLM, Username selector: {username_selector}, Password selector: {password_selector}, Submit selector: {submit_selector}")
                 return False
+            self.logger.debug(f"[AUTH] Username selector: {username_selector}")
+            self.logger.debug(f"[AUTH] Password selector: {password_selector}")
+            self.logger.debug(f"[AUTH] Submit selector: {submit_selector}")
+
+            
 
             username_field = wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, username_selector))
@@ -452,15 +472,27 @@ class PageAnalysisService:
             submit_button = wait.until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, submit_selector))
             )
+            current_url = self.driver.current_url
 
             try:
                 submit_button.click()
+                
             except ElementClickInterceptedException:
                 self.logger.debug("[AUTH] Click intercepted, using JS click")
                 self.driver.execute_script("arguments[0].click();", submit_button)
+            
+            try:
+                wait.until(EC.url_changes(current_url))
+                self.logger.debug("[AUTH] URL changed after login")
+            except TimeoutException:
+                self.logger.debug("[AUTH] URL did not change after login")
+
+            self.logger.debug(f"[AUTH] URL after login: {self.driver.current_url}")
+            self.driver.save_screenshot("/tmp/login_result.png")
+            
 
             # ---- Wait for redirect or DOM change ----
-            wait.until(lambda d: d.current_url != self.driver.current_url)
+            # wait.until(lambda d: d.current_url != self.driver.current_url)
 
             # Small additional stabilization wait
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
@@ -493,3 +525,20 @@ class PageAnalysisService:
         except Exception as e:
             self.logger.error(f"[AUTH] Unexpected authentication error: {e}")
             return False
+        
+    def llm_is_logged_in(self, page_html):
+       system_prompt = self.prompt_manager.get_prompt("login_state_check", "system")
+       user_prompt_template = self.prompt_manager.get_prompt("login_state_check", "user")
+       user_prompt = user_prompt_template.format(page_html=page_html)
+       result = self.llm.generate(system_prompt, user_prompt, model_type="analysis")
+       try:
+          data = json.loads(result)
+          logged_in = data.get("logged_in", False)
+          self.logger.info(f"Authentication state returned by llm: {logged_in}")
+          return logged_in
+       except Exception as e:
+         self.logger.error(f"[AUTH] Failed parsing login state JSON: {e}")
+         return False   
+
+
+    

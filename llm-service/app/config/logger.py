@@ -11,7 +11,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 def setup_logger():
     logger = logging.getLogger("autotest")
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     logger.propagate = False
 
     # ---- Formatter ----
@@ -29,12 +29,12 @@ def setup_logger():
         utc=False
     )
     file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)
+    file_handler.setLevel(logging.DEBUG)
 
     # ---- Console Handler ----
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
 
     # ---- Avoid duplicate handlers ----
     if not logger.handlers:

@@ -236,7 +236,7 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId, scenarioId }
             </div>
 
             {/* Valid Default */}
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <Label>Valid Default</Label>
               <Select
                 value={watch('is_valid_default') ? 'true' : 'false'}
@@ -250,7 +250,7 @@ export function TestCaseSheetForm({ open, onOpenChange, testCaseId, scenarioId }
                   <SelectItem value="false">False</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </div> */}
 
             {/* Validation */}
             <div className="space-y-2">

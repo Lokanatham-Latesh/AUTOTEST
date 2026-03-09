@@ -38,8 +38,25 @@ class TestScenarioService:
 
             # Add scenarios to database with auth detection
             for sc in scenarios:
+                
                 # Detect if this specific scenario requires authentication
                 requires_auth = self._detect_scenario_auth(sc)
+
+                title = sc["title"]
+                category = sc.get("category")
+
+                # Check for duplicate scenario
+                existing_scenario = (
+                    db.query(TestScenario)
+                    .filter(
+                        TestScenario.page_id == page.id,
+                        TestScenario.title == title,
+                        TestScenario.category == category).first()
+                        )
+                if existing_scenario:
+                    self.logger.info(
+                        f"[SCENARIO_SKIPPED_DUPLICATE] PageID={page.id} Title='{title}' Category='{category}'")
+                    continue
 
                 db.add(TestScenario(
                     page_id=page.id,

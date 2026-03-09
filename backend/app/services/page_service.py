@@ -340,5 +340,3 @@ class PageService:
         )
 
         return {"message": "Auth credentials updated and login re-validation triggered."}
-
-page_service = PageService()

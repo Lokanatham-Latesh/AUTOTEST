@@ -1,7 +1,7 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import { FileText, List, Database, GitBranch, Layout, Calendar } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+// import { Button } from '@/components/ui/button'
 import { useSiteInfoQuery } from '@/utils/queries/sitesQuery'
 import StatusBadge from '@/components/status/StatusBadge'
 import StatusDots from '@/components/status/StatusDots'
@@ -51,14 +51,14 @@ const SiteInfoPage: React.FC = () => {
               <StatusDots status={data.analyzeStatus} />
             </div>
 
-            {data.analyzeStatus === 'Processing' && (
+            {/* {data.analyzeStatus === 'Processing' && (
               <Button
                 variant="outline"
                 className="border-[#E63B3B] text-[#E63B3B] hover:bg-[#FFF0F0]"
               >
                 View Logs
               </Button>
-            )}
+            )} */}
           </div>
         </div>
 
