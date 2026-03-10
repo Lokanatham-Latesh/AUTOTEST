@@ -10,6 +10,7 @@ from sqlalchemy import func
 from shared_orm.models.test_case import TestCase
 from shared_orm.models.test_scenario import TestScenario
 from shared_orm.models.page_link import PageLink
+from shared_orm.models.test_execution import TestExecution
 from app.schemas.page_schema import PageInfoResponse
 from app.config.logger import logger
 from app.config.setting import settings
@@ -235,6 +236,9 @@ class PageService:
         ).delete(synchronize_session=False)
         db.query(TestScenario).filter(
             TestScenario.page_id == page.id
+        ).delete(synchronize_session=False)
+        db.query(TestExecution).filter(
+            TestExecution.page_id == page.id
         ).delete(synchronize_session=False)
         db.query(PageLink).filter(
             or_(

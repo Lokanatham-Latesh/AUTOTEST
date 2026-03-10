@@ -25,6 +25,7 @@ from app.routers.provider import router as provider_router
 from app.routers.provider_model import router as provider_model_router
 from app.routers.function import router as function_router
 from app.routers.test_case import router as test_case_router
+from app.routers.test_execution import router as test_execution_router
 
 
 @asynccontextmanager
@@ -127,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(function_router, prefix="/api/v1")
     app.include_router(test_scenario_router, prefix="/api/v1")
     app.include_router(test_case_router, prefix="/api/v1")
+    app.include_router(test_execution_router, prefix="/api/v1")
 
     return app
 

@@ -303,12 +303,16 @@ class TestExecutionService:
             ) as f:
                 f.write(script)
                 temp_file = f.name
+                
+            env = os.environ.copy()
+            env["PYTHONPATH"] = os.getcwd()
 
             result = subprocess.run(
                 [sys.executable, temp_file],
                 capture_output=True,
                 text=True,
                 timeout=120,   # 2 min — matches captcha_wait_time
+                env=env
             )
 
             combined_output = result.stdout + result.stderr

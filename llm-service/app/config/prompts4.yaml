@@ -386,19 +386,15 @@ generate_script:
       Use reliable selectors from page structure.
       IMPORTANT - Use EXACTLY this WebDriver setup for Selenium {selenium_version}:
       ```
-      from selenium import webdriver
-      from selenium.webdriver.chrome.service import Service
-      from selenium.webdriver.chrome.options import Options
-      from webdriver_manager.chrome import ChromeDriverManager
+      from app.services.selenium_driver import get_driver
 
-      service = Service(ChromeDriverManager().install())
-      options = Options()
-      options.add_argument("--no-sandbox")
-      options.add_argument("--disable-dev-shm-usage")
-      options.add_argument('--disable-gpu')
-      driver = webdriver.Chrome(service=service, options=options)
+      driver = get_driver()
       ```
-
+      Rules:
+      - Do NOT initialize webdriver.Chrome() manually
+      - Do NOT use webdriver_manager
+      - Always use get_driver() to initialize the browser
+  
       **Before starting any test steps, wait for all JavaScript and AJAX on the page to finish loading.**
       - Use a robust method such as:
           - Waiting for `document.readyState == 'complete'`
