@@ -1,9 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, UniqueConstraint
-from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
-
-Base = declarative_base()
-
+from shared_orm.db.base import Base
 
 class TestCaseCredential(Base):
     """

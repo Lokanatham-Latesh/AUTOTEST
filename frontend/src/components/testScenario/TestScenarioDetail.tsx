@@ -13,6 +13,7 @@ import { ConfirmModal } from '../common/ConfirmModal'
 import { toast } from 'sonner'
 import { useWebSocketContext } from '@/contexts/WebSocketProvider'
 import { useQueryClient } from '@tanstack/react-query'
+import { TestExecutionLogSheet } from '../testcase/TestExecutionLogSheet'
 
 interface TestCase {
   id: number
@@ -39,7 +40,11 @@ const TestScenarioDetail: React.FC = () => {
 
   const [openTestCaseModal, setOpenTestCaseModal] = useState(false)
   const [editTestCaseId, setEditTestCaseId] = useState<number | null>(null)
-
+  const [openExecutionSheet, setOpenExecutionSheet] = useState(false)
+  const [selectedExecutionTestCaseId, setSelectedExecutionTestCaseId] = useState<number | null>(
+    null,
+  )
+  const [selectedExecutionTitle, setSelectedExecutionTitle] = useState<string>('')
   const [isGenerating, setIsGenerating] = useState(false)
 
   /* ---------------- EXECUTE ---------------- */
@@ -131,6 +136,14 @@ const TestScenarioDetail: React.FC = () => {
       onClick: (row) => {
         setEditTestCaseId(row.id)
         setOpenTestCaseModal(true)
+      },
+    },
+    {
+      label: 'Execution Log',
+      onClick: (row) => {
+        setSelectedExecutionTestCaseId(row.id)
+        setSelectedExecutionTitle(row.title)
+        setOpenExecutionSheet(true)
       },
     },
     {
@@ -260,6 +273,14 @@ const TestScenarioDetail: React.FC = () => {
           open={openScenarioEdit}
           onOpenChange={setOpenScenarioEdit}
           initialData={data}
+        />
+      )}
+      {openExecutionSheet && (
+        <TestExecutionLogSheet
+          open={openExecutionSheet}
+          onOpenChange={setOpenExecutionSheet}
+          testCaseId={selectedExecutionTestCaseId}
+          title={selectedExecutionTitle}
         />
       )}
     </div>
