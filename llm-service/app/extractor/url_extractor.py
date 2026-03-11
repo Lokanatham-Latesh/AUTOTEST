@@ -8,28 +8,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from app.config.setting import settings
-
+from app.constants.constants import BLOCKED_EXTENSIONS,BLOCKED_PATH_KEYWORDS
 
 class URLExtractor:
     """Recursive URL extractor with depth control using BFS"""
 
-    BLOCKED_EXTENSIONS = {
-        ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp",
-        ".pdf", ".txt", ".csv", ".json", ".xml",
-        ".zip", ".rar", ".7z",
-        ".mp4", ".webm", ".avi",
-        ".doc", ".docx", ".xls", ".xlsx",
-        ".bin"
-    }
-
-    BLOCKED_PATH_KEYWORDS = {
-        "/download/",
-        "/uploads/",
-        "/files/",
-        "/assets/",
-        "/static/",
-        "/media/"
-    }
 
     def __init__(self, driver, logger=None):
         self.driver = driver
@@ -145,11 +128,11 @@ class URLExtractor:
     def is_extension_url(self, url: str) -> bool:
         parsed = urlparse(url)
         path = parsed.path.lower()
-        return any(path.endswith(ext) for ext in self.BLOCKED_EXTENSIONS)
+        return any(path.endswith(ext) for ext in BLOCKED_EXTENSIONS)
 
     def is_blocked_path(self, url: str) -> bool:
         lower_url = url.lower()
-        return any(keyword in lower_url for keyword in self.BLOCKED_PATH_KEYWORDS)
+        return any(keyword in lower_url for keyword in BLOCKED_PATH_KEYWORDS)
 
     def normalize_url(self, url: str) -> str:
         try:

@@ -871,16 +871,21 @@ class WorkerService:
         db.commit()
         await self._notify_ws(page, requested_by, scenario_id)
 
+        payload = {
+            "event": "TEST_EXECUTION_QUEUE",
+            "page_id": page.id,
+            "requested_by": requested_by,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        if scenario_id is not None:
+            payload["scenario_id"] = scenario_id
+        
         await rabbitmq_producer.publish_message(
             settings.TEST_EXECUTION_QUEUE,
-            {
-                "event":        "TEST_EXECUTION_QUEUE",
-                "page_id":      page.id,
-                "requested_by": requested_by,
-                "timestamp":    datetime.utcnow().isoformat(),
-            },
+            payload,
             priority=5,
         )
+      
 
     # =========================================================================
     # STEP 6 — TEST EXECUTION (blank — future)
