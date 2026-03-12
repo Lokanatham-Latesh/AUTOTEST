@@ -43,6 +43,7 @@ class Settings(BaseSettings):
 
     PAGE_AUTH_UPDATE_QUEUE: str
     AUTH_CREDENTIAL_UPDATE_QUEUE: str
+    SITE_STATUS_UPDATE_QUEUE: str
     
     class Config:
         env_file = ".env"

@@ -491,6 +491,8 @@ class WorkerService:
             site.updated_on = datetime.utcnow()
             site.updated_by = requested_by
             db.commit()
+            await self._notify_site_ws(site.id)
+
 
             loop   = asyncio.get_running_loop()
             driver = get_driver()
@@ -871,6 +873,24 @@ class WorkerService:
         db.commit()
         await self._notify_ws(page, requested_by, scenario_id)
 
+        if page.site_id:
+            remaining_pages = db.query(Page).filter(
+            Page.site_id == page.site_id,
+            Page.status != PageStatus.DONE
+            ).count()
+
+            if remaining_pages == 0:
+                site = db.query(Site).filter(Site.id == page.site_id).first()
+                if site:
+                    site.status = "Done"
+                    site.updated_on = datetime.utcnow()
+                    site.updated_by = requested_by
+                    db.commit()
+                    await self._notify_site_ws(page.site_id)
+                    logger.info(
+                        f"[SITE_COMPLETE] Site processing completed | site_id={site.id}"
+                    )
+
         payload = {
             "event": "TEST_EXECUTION_QUEUE",
             "page_id": page.id,
@@ -879,16 +899,19 @@ class WorkerService:
         }
         if scenario_id is not None:
             payload["scenario_id"] = scenario_id
-        
-        await rabbitmq_producer.publish_message(
+        try:
+            await rabbitmq_producer.publish_message(
             settings.TEST_EXECUTION_QUEUE,
             payload,
             priority=5,
-        )
-      
+            )
+        except Exception as e:
+            logger.error(
+                f"[TEST_EXECUTION_QUEUE] Failed to publish | page_id={page.id} | error={e}"
+            )
 
     # =========================================================================
-    # STEP 6 — TEST EXECUTION (blank — future)
+    # STEP 6 — TEST EXECUTION 
     # =========================================================================
 
     async def process_test_execution(self, body: dict):
@@ -1444,5 +1467,60 @@ class WorkerService:
         finally:
             db.close()
         logger.info(f"[PIPELINE] Completed pipeline | page_id={page.id}")
+
+    async def _notify_site_ws(self, site_id: int):
+        """
+        Publish SITE_STATUS_UPDATE event for WebSocket broadcasting.
+        """
+        db = SessionLocal()
+        try :
+            # total pages
+            page_count = db.query(Page).filter(
+                Page.site_id == site_id
+            ).count()
+
+            # total scenarios
+            scenario_count = (
+                db.query(TestScenario)
+                .join(Page, Page.id == TestScenario.page_id)
+                .filter(Page.site_id == site_id)
+                .count()
+            )
+
+            # total test cases
+            test_case_count = (
+                db.query(TestCase)
+                .join(Page, Page.id == TestCase.page_id)
+                .filter(Page.site_id == site_id)
+                .count()
+            )
+            site = db.query(Site).filter(Site.id == site_id).first()
+            payload = {
+                "site_id": site_id,
+                "site_status": site.status if site else None,
+                "page_count": page_count,
+                "test_scenario_count": scenario_count,
+                "test_case_count": test_case_count,
+            }
+            message = {
+                "event": "SITE_STATUS_UPDATE",
+                "payload": payload,
+            }
+            await rabbitmq_producer.publish_message(
+                settings.SITE_STATUS_UPDATE_QUEUE,
+                message
+            )
+            logger.info(
+                f"[SITE_WS_NOTIFY] site_id={site_id} "
+                f"pages={page_count} scenarios={scenario_count} cases={test_case_count}"
+            )
+        except Exception as e:
+            logger.error(
+                f"[SITE_WS_NOTIFY] Failed | site_id={site_id} error={e}"
+            )  
+
+        finally:
+            db.close()
+
 
 worker_service = WorkerService()

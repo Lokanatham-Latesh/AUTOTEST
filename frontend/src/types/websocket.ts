@@ -20,6 +20,17 @@ export type WSMessage =
       }
       timestamp?: number
     }
+  | {
+      type: 'SITE_STATUS_UPDATE'
+      payload: {
+        site_id: number
+        site_status: string | null
+        page_count: number
+        test_scenario_count: number
+        test_case_count: number
+      }
+      timestamp?: number
+    }
 
 /* --------------------------
    Payload Types
