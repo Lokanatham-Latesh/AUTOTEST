@@ -3,6 +3,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTestExecutions } from '@/utils/queries/testExecutionQueries'
+import { formatDateTimeDDMMYYYY } from '@/utils/helper'
 
 interface Props {
   open: boolean
@@ -71,7 +72,7 @@ export const TestExecutionLogSheet: React.FC<Props> = ({
             {executions.map((item: any) => (
               <div key={item.id} className="border-b last:border-none">
                 <div className="grid grid-cols-3 items-center px-6 py-4">
-                  <div className="text-base">{item.executed_on}</div>
+                  <div className="text-base"> {formatDateTimeDDMMYYYY(item.executed_on)}</div>
 
                   <div>
                     <span
