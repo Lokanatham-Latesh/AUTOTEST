@@ -16,6 +16,17 @@ class TestExecutionService:
         db: Session,
         user: User
     ):
+        """
+        Fetch execution logs for a given test case.
+
+        Args:
+            test_case_id (int): ID of the test case.
+            db (Session): Database session.
+            user (User): Current user (for logging).
+
+        Returns:
+            List[TestExecution]: Executions ordered by latest execution time.
+        """
         try:
             logger.info(
                 f"[GET_TEST_EXECUTIONS_REQUEST] User={user.id} TestCaseID={test_case_id}"

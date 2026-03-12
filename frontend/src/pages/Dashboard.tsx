@@ -10,6 +10,7 @@ import type { SortType } from '@/types'
 import { useWebSocketContext } from '@/contexts/WebSocketProvider'
 import { useDeleteSiteMutation } from '@/utils/queries/sitesQuery'
 import { ConfirmModal } from '@/components/common/ConfirmModal'
+import { useQueryClient } from '@tanstack/react-query'
 
 const Dashboard: React.FC = React.memo(() => {
   const [search, setSearch] = React.useState('')
@@ -20,7 +21,7 @@ const Dashboard: React.FC = React.memo(() => {
 
   const [page, setPage] = React.useState(1)
   const [pageSize, setPageSize] = React.useState(10)
-
+  const queryClient = useQueryClient()
   const createSiteMutation = useCreateSiteMutation()
   const deleteSiteMutation = useDeleteSiteMutation()
   const { sendMessage, lastMessage, isConnected, connectionState } = useWebSocketContext()
@@ -39,6 +40,7 @@ const Dashboard: React.FC = React.memo(() => {
     search,
     sort,
   })
+
 
   const handleAdd = (values: { title: string; url: string }) => {
     createSiteMutation.mutate(
@@ -59,29 +61,51 @@ const Dashboard: React.FC = React.memo(() => {
     )
   }
 
-  
-
   const handleDelete = (site: any) => {
     setSelectedSiteId(Number(site.id))
     setOpenDeleteModal(true)
   }
 
-const handleConfirmDelete = () => {
-  if (!selectedSiteId) return
+  const handleConfirmDelete = () => {
+    if (!selectedSiteId) return
 
-  deleteSiteMutation.mutate(selectedSiteId, {
-    onSuccess: () => {
-      toast.success('Site deleted successfully')
-      setOpenDeleteModal(false)
-      setSelectedSiteId(null)
-    },
-    onError: (error: any) => {
-      toast.error(error?.response?.data?.detail || 'Failed to delete site')
-    },
-  })
-}
+    deleteSiteMutation.mutate(selectedSiteId, {
+      onSuccess: () => {
+        toast.success('Site deleted successfully')
+        setOpenDeleteModal(false)
+        setSelectedSiteId(null)
+      },
+      onError: (error: any) => {
+        toast.error(error?.response?.data?.detail || 'Failed to delete site')
+      },
+    })
+  }
 
+  React.useEffect(() => {
+    if (!lastMessage) return
 
+    // Only handle site updates
+    if (lastMessage.type !== 'SITE_STATUS_UPDATE') return
+
+    const { site_id, site_status} =
+      lastMessage.payload
+
+    queryClient.setQueriesData({ queryKey: ['sites'], exact: false }, (oldData: any) => {
+      if (!oldData?.data || !Array.isArray(oldData.data)) return oldData
+
+      return {
+        ...oldData,
+        data: oldData.data.map((site: any) =>
+          site.id === site_id
+            ? {
+                ...site,
+                status: site_status ?? site.status,
+              }
+            : site,
+        ),
+      }
+    })
+  }, [lastMessage, queryClient])
   return (
     <div className="flex h-full flex-col">
       <SearchBar

@@ -1,14 +1,18 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { FileText, List, Database, GitBranch, Layout, Calendar } from 'lucide-react'
 // import { Button } from '@/components/ui/button'
 import { useSiteInfoQuery } from '@/utils/queries/sitesQuery'
 import StatusBadge from '@/components/status/StatusBadge'
 import StatusDots from '@/components/status/StatusDots'
+import { useWebSocketContext } from '@/contexts/WebSocketProvider'
+import { useQueryClient } from '@tanstack/react-query'
 
 const SiteInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading, isError } = useSiteInfoQuery(id || '')
+  const queryClient = useQueryClient()
+  const { lastMessage } = useWebSocketContext()
 
   if (isLoading) {
     return <div className="p-6 text-sm text-gray-500">Loading site info...</div>
@@ -34,6 +38,34 @@ const SiteInfoPage: React.FC = () => {
       icon: <Calendar className="w-5 h-5" />,
     },
   ]
+
+
+  useEffect(() => {
+    if (!lastMessage) return
+    if (lastMessage.type !== 'SITE_STATUS_UPDATE') return
+
+    const { site_id, site_status, page_count, test_scenario_count, test_case_count } =
+      lastMessage.payload
+
+    // only update if this page matches the site
+    if (String(site_id) !== id) return
+
+    queryClient.setQueryData(['site-info', id], (oldData: any) => {
+      if (!oldData) return oldData
+
+      return {
+        ...oldData,
+        analyzeStatus: site_status ?? oldData.analyzeStatus,
+
+        stats: {
+          ...oldData.stats,
+          pages: page_count ?? oldData.stats.pages,
+          testScenario: test_scenario_count ?? oldData.stats.testScenario,
+          testCases: test_case_count ?? oldData.stats.testCases,
+        },
+      }
+    })
+  }, [lastMessage, queryClient, id])
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[6.5fr_3.5fr] gap-8 mx-auto">
