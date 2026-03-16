@@ -14,7 +14,7 @@ from langchain.schema import HumanMessage, SystemMessage
 class LLMWrapper:
     """Wrapper class for handling different LLM providers"""
     
-    def __init__(self, config_path=None, llm_provider_choice=3):
+    def __init__(self, config_path=None, llm_provider_choice=1):
         """
         Initialize LLM wrapper with configuration
         

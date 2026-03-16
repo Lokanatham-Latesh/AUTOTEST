@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RotateCcw, Loader2 } from 'lucide-react'
+import { RotateCcw, Loader2, Copy } from 'lucide-react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,7 +26,6 @@ export function ViewTestScriptSheet({ open, onOpenChange, scenarioId }: Props) {
 
   const [isRegenerating, setIsRegenerating] = useState(false)
 
-
   const handleRegenerate = () => {
     if (!scenarioId || isRegenerating) return
 
@@ -40,6 +39,16 @@ export function ViewTestScriptSheet({ open, onOpenChange, scenarioId }: Props) {
     })
   }
 
+  const handleCopyScript = async () => {
+    if (!data?.script) return
+
+    try {
+      await navigator.clipboard.writeText(data.script)
+      toast.success('Test script copied to clipboard')
+    } catch {
+      toast.error('Failed to copy script')
+    }
+  }
 
   useEffect(() => {
     if (!lastMessage) return
@@ -67,28 +76,38 @@ export function ViewTestScriptSheet({ open, onOpenChange, scenarioId }: Props) {
       <SheetContent
         side="right"
         className="
-          w-[750px] sm:w-[850px] p-0 flex flex-col
-          **:data-[slot=sheet-close]:text-red-500
-          **:data-[slot=sheet-close]:hover:text-red-600
-          **:data-[slot=sheet-close]:opacity-100
-          [&_[data-slot=sheet-close]_svg]:w-6
-          [&_[data-slot=sheet-close]_svg]:h-6
-        "
+    !w-[40vw] !max-w-none p-0 flex flex-col
+    **:data-[slot=sheet-close]:text-red-500
+    **:data-[slot=sheet-close]:hover:text-red-600
+    **:data-[slot=sheet-close]:opacity-100
+    [&_[data-slot=sheet-close]_svg]:w-6
+    [&_[data-slot=sheet-close]_svg]:h-6
+  "
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3 border-b">
+        <div className="flex items-center justify-between pl-6 pr-14 py-3 border-b">
           <h2 className="text-xl font-semibold">View Test Script</h2>
+          {data?.script && (
+            <Button
+              variant="outline"
+              onClick={handleCopyScript}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <Copy className="h-4 w-4" />
+              Copy Script
+            </Button>
+          )}
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-4">
+        <div className="flex-1 overflow-y-auto px-4 py-4">
           <div className="border rounded-lg bg-gray-50 p-4 min-h-[400px]">
             {isLoading || isFetching ? (
               <div className="text-sm text-muted-foreground">Loading test script...</div>
             ) : isError ? (
               <div className="text-sm text-red-500">Failed to load test script.</div>
             ) : (
-              <pre className="whitespace-pre-wrap wrap-break-word text-sm font-mono leading-relaxed">
+              <pre className="whitespace-pre-wrap break-words text-sm font-mono leading-relaxed">
                 {data?.script || 'No script available'}
               </pre>
             )}
