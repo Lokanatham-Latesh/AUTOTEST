@@ -3,7 +3,7 @@ import signal
 
 from aiormq import AMQPConnectionError
 from app.config.rabbitmq import rabbitmq_connection
-from app.services.rabbitmq_consumer import RabbitMQConsumer
+from app.messaging.rabbitmq_consumer import RabbitMQConsumer
 from app.config.logger import logger
 from app.workers.queue_router import QUEUE_HANDLER_MAP
 

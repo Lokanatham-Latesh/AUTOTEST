@@ -86,7 +86,7 @@ from app.extractor.url_extractor import URLExtractor
 from app.services.page_analysis_service import PageAnalysisService
 from app.llm.llm_wrapper import LLMWrapper
 from app.llm.prompt_manager import PromptManager
-from app.services.rabbitmq_producer import rabbitmq_producer
+from app.messaging.rabbitmq_producer import rabbitmq_producer
 from app.config.database import SessionLocal
 from app.config.setting import settings
 from app.services.test_scenario_service import TestScenarioService

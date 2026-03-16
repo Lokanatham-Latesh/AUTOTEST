@@ -488,7 +488,6 @@ class PageAnalysisService:
                 self.logger.debug("[AUTH] URL did not change after login")
 
             self.logger.debug(f"[AUTH] URL after login: {self.driver.current_url}")
-            self.driver.save_screenshot("/tmp/login_result.png")
             
 
             # ---- Wait for redirect or DOM change ----
