@@ -9,12 +9,13 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
 from langchain.schema import HumanMessage, SystemMessage
+from shared_orm.models.provider import Provider
 
 
 class LLMWrapper:
     """Wrapper class for handling different LLM providers"""
     
-    def __init__(self, config_path=None, llm_provider_choice=1):
+    def __init__(self, db,config_path=None):
         """
         Initialize LLM wrapper with configuration
         
@@ -22,6 +23,7 @@ class LLMWrapper:
             config_path (str, optional): Path to configuration file
             llm_provider_choice (int): Provider choice (1=OpenAI, 2=Groq, 3=Google-Gemini, 4=Anthropic, 5=Ollama)
         """
+        self.db = db
         if config_path is None:
             # Get the package directory and default config path
             package_dir = os.path.dirname(os.path.dirname(__file__))
@@ -29,40 +31,40 @@ class LLMWrapper:
             
         with open(config_path) as f:
             self.config = yaml.safe_load(f)
+        
+        provider_data = self._get_active_provider_from_db()
 
-        # Override provider based on user choice
-        provider_mapping = {
-            1: "openai",
-            2: "groq", 
-            3: "google-gemini",
-            4: "anthropic",
-            5: "ollama"
-        }
-            
-        # self.provider = self.config["model_provider"]
-        # self.provider = provider_mapping[llm_provider_choice]
-        self.provider = provider_mapping.get(llm_provider_choice)
+        self.provider = self._map_provider_name(provider_data.title)
+        self.api_key = provider_data.key
+
         if not self.provider:
-            raise ValueError(f"Invalid provider choice: {llm_provider_choice}. Valid choices: {list(provider_mapping.keys())}")
+            raise ValueError(f"Unsupported provider: {provider_data.title}")
+        if self.provider != "ollama" and not self.api_key:
+            raise ValueError(f"API key missing for provider: {provider_data.title}")
+        
         self.models = self._initialize_models()
 
-    def _get_api_key(self, provider):
-        """Get API key for the specified provider"""
-        if provider == "ollama":
-            return None # Ollama does not require an API key
+    
+    def _get_active_provider_from_db(self):
+
+        provider = (self.db.query(Provider)
+            .filter(Provider.is_active == True)
+            .first()
+        )
+        if not provider:
+            raise ValueError("No active LLM provider found in DB")
         
-        key_mapping = {
-            "openai": "OPENAI_API_KEY",
-            "groq": "GROQ_API_KEY",
-            "google-gemini": "GOOGLE_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY"
+        return provider
+    
+    def _map_provider_name(self, db_name):
+        mapping = {
+            "OpenAI": "openai",
+            "Gemini": "google-gemini",
+            "Claude": "anthropic",
+            "Ollama": "ollama"
         }
-        
-        api_key = os.getenv(key_mapping[provider])
-        if not api_key:
-            raise ValueError(f"API key not found for provider: {provider}. Set {key_mapping[provider]} environment variable.")
-        
-        return api_key
+        return mapping.get(db_name)
+    
 
     def _initialize_models(self):
         """Initialize model instances based on provider configuration"""
@@ -85,7 +87,7 @@ class LLMWrapper:
         #     "ANTHROPIC_API_KEY"
         # )
 
-        api_key = self._get_api_key(provider)
+        api_key = self.api_key
 
         if provider == "openai":
             return {

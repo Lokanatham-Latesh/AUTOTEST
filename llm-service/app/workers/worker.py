@@ -309,7 +309,7 @@ class WorkerService:
             return
 
         driver         = get_driver()
-        llm            = LLMWrapper()
+        llm            = LLMWrapper(db=db)
         prompt_manager = PromptManager()
         cred_service   = TestCredentialService(llm=llm, logger=logger)
 
@@ -579,7 +579,7 @@ class WorkerService:
         await self._notify_ws(page, requested_by)
 
         driver         = get_driver()
-        llm            = LLMWrapper()
+        llm            = LLMWrapper(db=db)
         prompt_manager = PromptManager()
         loop           = asyncio.get_running_loop()
 
@@ -650,7 +650,7 @@ class WorkerService:
             await loop.run_in_executor(
                 None,
                 TestScenarioService(
-                    llm=LLMWrapper(), prompt_manager=PromptManager(), logger=logger
+                    llm=LLMWrapper(db=db), prompt_manager=PromptManager(), logger=logger
                 ).generate,
                 page_id,
                 requested_by,
@@ -729,7 +729,7 @@ class WorkerService:
                 await loop.run_in_executor(
                     None,
                     TestCaseService(
-                        llm=LLMWrapper(), prompt_manager=PromptManager(), logger=logger
+                        llm=LLMWrapper(db=db), prompt_manager=PromptManager(), logger=logger
                     ).generate_for_scenario,
                     page_id,
                     scenario_id,
@@ -740,7 +740,7 @@ class WorkerService:
                 await loop.run_in_executor(
                     None,
                     TestCaseService(
-                        llm=LLMWrapper(), prompt_manager=PromptManager(), logger=logger
+                        llm=LLMWrapper(db=db), prompt_manager=PromptManager(), logger=logger
                     ).generate,
                     page_id,
                     requested_by,
@@ -828,7 +828,7 @@ class WorkerService:
             if require_login:
                 auth_tc = self._get_login_test_case(db, page_id)
                 if auth_tc:
-                    resolved = TestCredentialService(llm=LLMWrapper(), logger=logger).resolve(
+                    resolved = TestCredentialService(llm=LLMWrapper(db=db), logger=logger).resolve(
                         page_id, auth_tc.data.get("test_data", {})
                     )
                     for key, value in resolved.items():
@@ -841,7 +841,7 @@ class WorkerService:
             await loop.run_in_executor(
                 None,
                 TestScriptService(
-                    llm=LLMWrapper(), prompt_manager=PromptManager(), logger=logger
+                    llm=LLMWrapper(db=db), prompt_manager=PromptManager(), logger=logger
                 ).generate_scripts_for_page,
                 page,
                 require_login,
@@ -954,7 +954,7 @@ class WorkerService:
             await loop.run_in_executor(
                 None,
                 TestExecutionService(
-                    llm=LLMWrapper(),
+                    llm=LLMWrapper(db=db),
                     prompt_manager=PromptManager(),
                     logger=logger,
                 ).execute_page,
@@ -1249,7 +1249,7 @@ class WorkerService:
                     return
 
                 resolved = TestCredentialService(
-                    llm=LLMWrapper(), logger=logger
+                    llm=LLMWrapper(db=db), logger=logger
                 ).resolve(auth_page.id, auth_tc.data.get("test_data", {}))
 
                 for key, value in resolved.items():
@@ -1264,7 +1264,7 @@ class WorkerService:
 
             # Drive Selenium login with new credentials
             driver         = get_driver()
-            llm            = LLMWrapper()
+            llm            = LLMWrapper(db=db)
             prompt_manager = PromptManager()
 
             try:
@@ -1382,7 +1382,7 @@ class WorkerService:
     def _run_page_pipeline(self, driver, page: Page, requested_by: int):
 
         logger.info(f"[PIPELINE] Running pipeline | page_id={page.id}")
-        llm = LLMWrapper()
+        llm = LLMWrapper(db=db)
         prompt_manager = PromptManager()
 
         analyzer = PageAnalysisService(
@@ -1449,7 +1449,7 @@ class WorkerService:
             )
             logger.info(f"[PIPELINE] Executing tests | page_id={page.id}")
             TestExecutionService(
-                llm=LLMWrapper(),
+                llm=LLMWrapper(db=db),
                 prompt_manager=PromptManager(),
                 logger=logger,
             ).execute_page(

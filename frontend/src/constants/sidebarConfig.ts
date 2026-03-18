@@ -30,7 +30,7 @@ export const SIDEBAR_CONFIGS: SidebarConfig[] = [
     items: [
       { id: 'site', label: 'Site', icon: LayoutDashboard, path: '/' },
       { id: 'page', label: 'Page', icon: FileText, path: '/page' },
-      { id: 'user', label: 'User', icon: ListTree, path: '/user' },
+      // { id: 'user', label: 'User', icon: ListTree, path: '/user' },
       { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
     ],
   },
