@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
-import { useProvidersQuery } from '@/utils/queries/providerQueries'
-import { useBulkUpdateProvidersMutation, useProviderModelsQuery, useBulkUpdateProviderModelsMutation } from '@/utils/queries/providerQueries'
+import {
+  useProvidersQuery,
+  useBulkUpdateProvidersMutation,
+  useProviderModelsQuery,
+  useBulkUpdateProviderModelsMutation,
+} from '@/utils/queries/providerQueries'
 import { CollapsibleSection } from './CollapsibleSection'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -17,19 +20,20 @@ interface EditableProvider {
 }
 
 export const LlmSettings = () => {
-
   const { data: providers, isLoading } = useProvidersQuery()
   const { mutate: bulkUpdateProviders, isPaused: isSaving } = useBulkUpdateProvidersMutation()
+
   const [editableProviders, setEditableProviders] = useState<EditableProvider[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<number | null>(null)
   const [editableModels, setEditableModels] = useState<any[]>([])
   const [originalModels, setOriginalModels] = useState<any[]>([])
   const [originalProviders, setOriginalProviders] = useState<EditableProvider[]>([])
 
-
+  // Set default selected provider
   useEffect(() => {
     if (providers?.length && !selectedProviderId) {
-      setSelectedProviderId(providers[0].id)
+      const activeProvider = providers.find((p) => p.is_active)
+      setSelectedProviderId(activeProvider?.id ?? providers[0].id)
     }
   }, [providers, selectedProviderId])
 
@@ -37,6 +41,7 @@ export const LlmSettings = () => {
     selectedProviderId ?? 0,
   )
 
+  // Map providers
   useEffect(() => {
     if (providers) {
       const mappedProviders = providers.map((p) => ({
@@ -47,21 +52,56 @@ export const LlmSettings = () => {
       }))
 
       setEditableProviders(mappedProviders)
-      setOriginalProviders(mappedProviders) 
+      setOriginalProviders(mappedProviders)
     }
   }, [providers])
 
-
+  // Load models
   useEffect(() => {
     if (providerModels?.models) {
       setEditableModels(providerModels.models)
       setOriginalModels(providerModels.models)
     }
   }, [providerModels])
+
+  // Handle provider selection (ONLY ONE ACTIVE)
+  const handleToggle = (providerId: number) => {
+    setEditableProviders((prev) =>
+      prev.map((p) => ({
+        ...p,
+        is_active: p.provider_id === providerId,
+      })),
+    )
+  }
+
+  const handleKeyChange = (providerId: number, value: string) => {
+    setEditableProviders((prev) =>
+      prev.map((p) => (p.provider_id === providerId ? { ...p, key: value } : p)),
+    )
+  }
+
+  // Model change
   const handleModelChange = (modelId: number, field: 'temperature' | 'prompt', value: any) => {
     setEditableModels((prev) => prev.map((m) => (m.id === modelId ? { ...m, [field]: value } : m)))
   }
 
+  // Detect model changes
+  const hasModelChanges = editableModels.some((edited) => {
+    const original = originalModels.find((o) => o.id === edited.id)
+    if (!original) return false
+
+    return original.temperature !== edited.temperature || original.prompt !== edited.prompt
+  })
+
+  // Detect provider changes
+  const hasProviderChanges = editableProviders.some((edited) => {
+    const original = originalProviders.find((o) => o.provider_id === edited.provider_id)
+    if (!original) return false
+
+    return original.is_active !== edited.is_active || original.key !== edited.key
+  })
+
+  // Prepare models payload
   const getUpdatedModelsPayload = () => {
     return editableModels
       .filter((edited) => {
@@ -92,7 +132,7 @@ export const LlmSettings = () => {
     saveProviderModels(payload, {
       onSuccess: () => {
         toast.success('Model settings updated successfully')
-         setOriginalModels(editableModels)
+        setOriginalModels(editableModels)
       },
       onError: (error: any) => {
         toast.error(error?.response?.data?.detail || 'Failed to update models')
@@ -100,44 +140,17 @@ export const LlmSettings = () => {
     })
   }
 
-  const handleToggle = (providerId: number, checked: boolean) => {
-    setEditableProviders((prev) =>
-      prev.map((p) => (p.provider_id === providerId ? { ...p, is_active: checked } : p)),
-    )
-  }
-
-  const handleKeyChange = (providerId: number, value: string) => {
-    setEditableProviders((prev) =>
-      prev.map((p) => (p.provider_id === providerId ? { ...p, key: value } : p)),
-    )
-  }
-  const hasModelChanges = editableModels.some((edited) => {
-    const original = originalModels.find((o) => o.id === edited.id)
-    if (!original) return false
-
-    return original.temperature !== edited.temperature || original.prompt !== edited.prompt
-  })
-
-  const hasProviderChanges = editableProviders.some((edited) => {
-    const original = originalProviders.find((o) => o.provider_id === edited.provider_id)
-    if (!original) return false
-
-    return original.is_active !== edited.is_active || original.key !== edited.key
-  })
-
-
+  // Save providers
   const handleSaveProviders = () => {
-    const hasAtLeastOneActive = editableProviders.some((p) => p.is_active)
+    const activeProvider = editableProviders.find((p) => p.is_active)
 
-    if (!hasAtLeastOneActive) {
-      toast.error('At least one provider must be enabled')
+    if (!activeProvider) {
+      toast.error('One provider must be selected')
       return
     }
 
-    const invalidProvider = editableProviders.find((p) => p.is_active && !p.key.trim())
-
-    if (invalidProvider) {
-      toast.error(`Key is required for ${invalidProvider.title}`)
+    if (!activeProvider.key.trim()) {
+      toast.error(`Key is required for ${activeProvider.title}`)
       return
     }
 
@@ -154,22 +167,27 @@ export const LlmSettings = () => {
 
   return (
     <div className="space-y-6">
-      <CollapsibleSection title="API Provider" onSave={handleSaveProviders} loading={isSaving}disabled={!hasProviderChanges}>
+      {/* PROVIDERS */}
+      <CollapsibleSection
+        title="API Provider"
+        onSave={handleSaveProviders}
+        loading={isSaving}
+        disabled={!hasProviderChanges}
+      >
         {isLoading ? (
           <div className="flex justify-center py-6">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-6">
+          <RadioGroup
+            value={editableProviders.find((p) => p.is_active)?.provider_id.toString() ?? ''}
+            onValueChange={(value) => handleToggle(Number(value))}
+            className="grid grid-cols-2 gap-6"
+          >
             {editableProviders.map((provider) => (
               <div key={provider.provider_id} className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={provider.is_active}
-                    onCheckedChange={(checked) =>
-                      handleToggle(provider.provider_id, Boolean(checked))
-                    }
-                  />
+                  <RadioGroupItem value={String(provider.provider_id)} />
                   <span className="font-medium">{provider.title}</span>
                 </div>
 
@@ -181,11 +199,17 @@ export const LlmSettings = () => {
                 />
               </div>
             ))}
-          </div>
+          </RadioGroup>
         )}
       </CollapsibleSection>
 
-      <CollapsibleSection title="Model Provider" onSave={handleSaveModels} loading={isSavingModels} disabled ={!hasModelChanges}>
+      {/* MODELS */}
+      <CollapsibleSection
+        title="Model Provider"
+        onSave={handleSaveModels}
+        loading={isSavingModels}
+        disabled={!hasModelChanges}
+      >
         <RadioGroup
           value={String(selectedProviderId)}
           onValueChange={(v) => setSelectedProviderId(Number(v))}
@@ -218,7 +242,7 @@ export const LlmSettings = () => {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="md:col-span-2">
-                          <Input value={model.model} readOnly placeholder="Model" />
+                          <Input value={model.model} readOnly />
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>Model used for this function</TooltipContent>
@@ -226,18 +250,16 @@ export const LlmSettings = () => {
 
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div>
-                          <Input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="1"
-                            value={model.temperature}
-                            onChange={(e) =>
-                              handleModelChange(model.id, 'temperature', Number(e.target.value))
-                            }
-                          />
-                        </div>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="1"
+                          value={model.temperature}
+                          onChange={(e) =>
+                            handleModelChange(model.id, 'temperature', Number(e.target.value))
+                          }
+                        />
                       </TooltipTrigger>
                       <TooltipContent>
                         Controls randomness (0 = deterministic, 1 = creative)
@@ -251,7 +273,6 @@ export const LlmSettings = () => {
                         value={model.prompt ?? ''}
                         rows={5}
                         className="resize-none"
-                        placeholder="Prompt"
                         onChange={(e) => handleModelChange(model.id, 'prompt', e.target.value)}
                       />
                     </TooltipTrigger>
