@@ -180,7 +180,7 @@ const TestScenarioDetail: React.FC = () => {
               className="bg-red-600 hover:bg-red-700 text-white cursor-pointer flex items-center gap-2"
             >
               {isGenerating && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isGenerating ? 'Generating...' : 'Execute'}
+              {isGenerating ? 'Executing...' : 'Execute'}
             </Button>
           </div>
         </div>

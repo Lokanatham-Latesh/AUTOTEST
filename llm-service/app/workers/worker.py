@@ -1382,6 +1382,7 @@ class WorkerService:
     def _run_page_pipeline(self, driver, page: Page, requested_by: int):
 
         logger.info(f"[PIPELINE] Running pipeline | page_id={page.id}")
+        db = SessionLocal()
         llm = LLMWrapper(db=db)
         prompt_manager = PromptManager()
 
@@ -1392,7 +1393,7 @@ class WorkerService:
             prompt_manager=prompt_manager
         )
 
-        db = SessionLocal()
+        
 
         try:
             # STEP 1 — ANALYZE PAGE
