@@ -49,6 +49,7 @@ from app.llm.prompt_manager import PromptManager
 from shared_orm.models.test_scenario import TestScenario
 from shared_orm.models.test_case import TestCase
 from shared_orm.models.test_execution import TestExecution
+from app.services.test_credential_service import TestCredentialService
 
 
 class TestExecutionService:
@@ -111,14 +112,14 @@ class TestExecutionService:
 
     def _execute_scenario(self, db, scenario, page_id, test_suite_id, requested_by):
         """
-        Run a single scenario's script and persist one TestExecution row
-        per TestCase belonging to that scenario.
+        Run a scenario's script once per TestCase, injecting that single
+        test case's resolved data via __TEST_CASE__.  Each subprocess run
+        executes exactly one test case — no internal loops in the script.
         """
         if not scenario.script or not scenario.script.strip():
             self.logger.warning(
                 f"[EXEC] No script on scenario_id={scenario.id} — skipping"
             )
-            # Still write a "skipped" record for every test case
             self._persist_results(
                 db=db,
                 scenario=scenario,
@@ -134,93 +135,92 @@ class TestExecutionService:
             f"[EXEC] Running | scenario_id={scenario.id} title='{scenario.title}'"
         )
 
-        # Execute once per test case, injecting the test case data into the
-        # script so tests can access runtime inputs for validation.
         test_cases = db.query(TestCase).filter(
             TestCase.test_scenario_id == scenario.id,
             TestCase.page_id == page_id,
         ).all()
 
-        # If there are no test cases, keep legacy behaviour: run once and
-        # persist a single execution row with test_case_id=None
+        # No test cases at all — run the script bare (legacy fallback)
         if not test_cases:
             result = self.execute_test_script(scenario.script)
-
-            # Build the full log string from stdout + stderr
-            log_parts = []
-            if result.get("output"):
-                log_parts.append(result["output"])
-            if result.get("error"):
-                log_parts.append(result["error"])
-            logs = "\n".join(log_parts).strip() or "(no output)"
-
-            if result.get("success") is None:
-                status = "error"
-            elif result["success"]:
-                status = "passed"
-            else:
-                status = "failed"
-
-            self.logger.info(
-                f"[EXEC] Result | scenario_id={scenario.id} status={status}"
-            )
-
+            log_parts = [result.get("output", ""), result.get("error", "")]
+            logs   = "\n".join(p for p in log_parts if p).strip() or "(no output)"
+            status = "error" if result.get("success") is None else ("passed" if result["success"] else "failed")
+            self.logger.info(f"[EXEC] Result | scenario_id={scenario.id} status={status}")
             self._persist_results(
-                db=db,
-                scenario=scenario,
-                page_id=page_id,
-                test_suite_id=test_suite_id,
-                requested_by=requested_by,
-                status=status,
-                logs=logs,
+                db=db, scenario=scenario, page_id=page_id,
+                test_suite_id=test_suite_id, requested_by=requested_by,
+                status=status, logs=logs,
             )
             return
 
-        # Iterate per test case and run the script with injected test-case data.
+        # ── Resolve credentials ONCE for the whole scenario ─────────────────
+        # Avoids re-querying the DB credential table on every test case.
+        resolved_credentials: dict[str, dict] = {}
+        try:
+            
+            cred_service = TestCredentialService(llm=self.llm, logger=self.logger)
+            for tc in test_cases:
+                raw_test_data = (tc.data or {}).get("test_data", {})
+                if raw_test_data:
+                    resolved_credentials[tc.id] = cred_service.resolve(
+                        page_id, raw_test_data
+                    )
+        except Exception as e:
+            self.logger.warning(f"[EXEC] Credential resolution failed: {e} — using raw test_data")
+
+        # ── Run the script ONCE per test case ────────────────────────────────
         for tc in test_cases:
             try:
                 self.logger.info(
-                    f"[EXEC] Running tc_id={tc.id} | scenario_id={scenario.id} title='{tc.title}'"
+                    f"[EXEC] Running tc_id={tc.id} | scenario_id={scenario.id} | '{tc.title}'"
                 )
 
-                # Ensure test case data is JSON-serializable
                 tc_data = tc.data or {}
                 if isinstance(tc_data, str):
                     try:
                         tc_data = json.loads(tc_data)
                     except Exception:
-                        # leave as string if not JSON
                         tc_data = {"value": tc_data}
 
-                # Execute script with a small header that provides `__TEST_CASE__`
-                # variable to the script runtime.
-                header = f"import json\n__TEST_CASE__ = {json.dumps(tc_data)}\n"
-                script_with_context = header + (scenario.script or "")
+                # Replace raw test_data with resolved values (real credentials)
+                resolved_td = resolved_credentials.get(tc.id)
+                if resolved_td:
+                    tc_data = {**tc_data, "test_data": resolved_td}
 
-                result = self.execute_test_script(script_with_context)
+                # Build the single-test-case payload the script reads at runtime
+                tc_payload = {
+                    "name":             tc.title,
+                    "steps":            tc_data.get("steps", []),
+                    "selectors":        tc_data.get("selectors", {}),
+                    "test_data":        tc_data.get("test_data", {}),
+                    "expected_outcome": tc.expected_outcome or {},
+                    "validation":       tc.validation or "",
+                    "is_valid":         tc.is_valid,
+                    "is_valid_default": tc.is_valid_default,
+                }
 
-                # Build the full log string from stdout + stderr
-                log_parts = []
-                if result.get("output"):
-                    log_parts.append(result["output"])
-                if result.get("error"):
-                    log_parts.append(result["error"])
-                logs = "\n".join(log_parts).strip() or "(no output)"
+                # Inject __TEST_CASE__ as the first lines of the script.
+                # The script reads from this variable — it does NOT loop internally.
+                header = (
+                    "import json\n"
+                    f"__TEST_CASE__ = {repr(tc_payload)}\n\n"
+                )
+                script_with_context = header + scenario.script
 
-                if result.get("success") is None:
-                    status = "error"
-                elif result["success"]:
-                    status = "passed"
-                else:
-                    status = "failed"
-
-                self.logger.info(
-                    f"[EXEC] TC Result | scenario_id={scenario.id} tc_id={tc.id} status={status}"
+                result      = self.execute_test_script(script_with_context)
+                log_parts   = [result.get("output", ""), result.get("error", "")]
+                logs        = "\n".join(p for p in log_parts if p).strip() or "(no output)"
+                status      = (
+                    "error"  if result.get("success") is None else
+                    "passed" if result["success"] else "failed"
                 )
 
-                executed_on = datetime.utcnow()
+                self.logger.info(
+                    f"[EXEC] TC Result | scenario_id={scenario.id} "
+                    f"tc_id={tc.id} status={status}"
+                )
 
-                # Upsert the execution row for this specific test case
                 self._upsert_execution(
                     db=db,
                     page_id=page_id,
@@ -230,28 +230,21 @@ class TestExecutionService:
                     requested_by=requested_by,
                     status=status,
                     logs=logs,
-                    executed_on=executed_on,
+                    executed_on=datetime.utcnow(),
                 )
 
             except Exception as e:
                 self.logger.error(
                     f"[EXEC] Execution failed for tc_id={getattr(tc, 'id', None)}: {e}"
                 )
-                # On per-test-case failure, write an error row for that tc
                 try:
                     self._upsert_execution(
-                        db=db,
-                        page_id=page_id,
-                        scenario=scenario,
-                        test_case=tc,
-                        test_suite_id=test_suite_id,
-                        requested_by=requested_by,
-                        status="error",
-                        logs=str(e),
-                        executed_on=datetime.utcnow(),
+                        db=db, page_id=page_id, scenario=scenario,
+                        test_case=tc, test_suite_id=test_suite_id,
+                        requested_by=requested_by, status="error",
+                        logs=str(e), executed_on=datetime.utcnow(),
                     )
                 except Exception:
-                    # swallow to avoid blocking remaining TCs
                     pass
 
     # -----------------------------------------------------------------------
