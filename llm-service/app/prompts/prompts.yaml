@@ -375,19 +375,19 @@ generate_script:
           - Use `retry_find_element` to locate elements and `click_element` for clicking actions
     user: |
       Generate {language} Selenium script for the following scenario and its test_cases array.
- 
+
       Scenario:
       {scenario}
- 
+
       Test cases:
       {test_cases}
- 
+
       Page Structure:
       {page_metadata}
- 
+
       Current page HTML:
       {page_source}
- 
+
       IMPORTANT: Generate a script that executes EXACTLY ONE test case.
       At runtime, the variable `__TEST_CASE__` is injected into the script's global scope before execution.
       It is a dict with this shape:
@@ -399,7 +399,7 @@ generate_script:
           "expected_outcome": {{"type": "redirect|text_present|...", "selector": "#sel", "contains": "text"}},
           "validation": "description"
         }}
- 
+
       Your script MUST:
       - Read all inputs from `__TEST_CASE__` — do NOT hardcode test_cases arrays or loop over multiple cases
       - Use `__TEST_CASE__["test_data"]` to get field values (these are already resolved real values)
@@ -407,15 +407,15 @@ generate_script:
       - Use `__TEST_CASE__["expected_outcome"]` for validation
       - Execute only the single test case represented by `__TEST_CASE__`
       - Log clearly: start, each step, pass/fail result
- 
+
       The `test_cases` array below is provided ONLY as context so you understand all possible
       selector shapes and field names across the scenario. Do NOT loop over it at runtime.
       Do NOT hardcode any test_cases list in the generated script.
- 
+
       Use reliable selectors from page structure.
- 
+
       IMPORTANT - Use EXACTLY this WebDriver setup for Selenium {selenium_version}:
-      Use the following logic:
+      Place this block at MODULE LEVEL (top of the script, outside any function or class):
       ```
       from app.services.selenium_driver import get_driver
       driver = get_driver()
@@ -426,24 +426,31 @@ generate_script:
       - Do NOT write `driver = get_driver()` inside a function — only at module level
       - Do NOT initialize webdriver.Chrome() manually
       - Do NOT use webdriver_manager
- 
+
       IMPORTANT:
       - Do NOT use or import any module named 'autotest'
       - Use only project-specific modules:
           - from shared_orm.models.page_link import PageLink
           - from shared_orm.models.page import Page
           - from app.config.database import SessionLocal
- 
+
       **Before starting any test steps, wait for all JavaScript and AJAX on the page to finish loading.**
       - Use a robust method such as:
           - Waiting for `document.readyState == 'complete'`
           - Waiting for jQuery/AJAX activity to finish if present
- 
+
       **Login Required**: {login_instructions}
         - If `Login Required` is "yes":
-          - **STRICT_RULE**
-             - Proceed with the login flow on the current page, **completely ignoring the page source or metadata for login form presence.**
-          - Do not assume any login url just use the following credentials on the current page:
+          - **STRICT_RULE**: Before attempting login, check if already authenticated.
+            Wrap the ENTIRE login block inside:
+            ```
+            if not globals().get('__COOKIES_AUTH_DONE__', False):
+                # login block here
+            else:
+                logger.info("Authentication already handled via session cookies — skipping login block.")
+            ```
+          - Inside that guard, proceed with the login flow:
+          - Use the following credentials:
               - Username: {username}
               - Password: {password}
           - Identify the login form selectors from the given json structure:
@@ -455,57 +462,52 @@ generate_script:
             ```
             WebDriverWait(driver, 10).until(EC.url_changes(driver.current_url))
             ```
-          - Log the URL change (e.g., logger.info("Login successful: URL changed to `driver.current_url`")).
+          - Log the URL change.
           - If the test case requires navigating to a specific page after login:
              - Use driver.get(target_url) to navigate to the specified URL.
-             - Validate the page load using:
-             ```
-             WebDriverWait(driver, 10).until(EC.url_to_be(target_url))
-             ```
-             - Confirm the current URL matches the target URL.
-             - Log the navigation.
+             - Validate the page load using WebDriverWait(driver, 10).until(EC.url_to_be(target_url))
           - If the URL does not change after login or the target URL is not reached, log an error and raise an exception.
- 
+
         - If `Login Required` is "no", skip the above steps.
- 
+
       **Navigation / Redirection Handling (DB Integration using Page & PageLink models)**
- 
+
       - Apply this ONLY for navigation/redirection test cases.
- 
+
       At the top of the script, include:
       ```
       from shared_orm.models.page_link import PageLink
       from shared_orm.models.page import Page
       from app.config.database import SessionLocal
       ```
- 
+
       - Start by navigating to the starting URL
       - Perform the navigation action using `click_element`
       - Wait for page load completion
       - Capture redirected URL
- 
+
       - Use database logic:
         ```
         with SessionLocal() as db:
- 
+
             source_page = db.query(Page).filter(Page.page_url == starting_url).first()
- 
+
             target_page = db.query(Page).filter(Page.page_url == redirected_url).first()
- 
+
             if not target_page:
                 target_page = Page(page_url=redirected_url)
                 db.add(target_page)
                 db.commit()
                 db.refresh(target_page)
- 
+
             existing_link = db.query(PageLink).filter(
                 PageLink.page_id_source == source_page.id,
                 PageLink.page_id_target == target_page.id
             ).first()
- 
+
             if existing_link:
                 logger.info("Redirect already exists in PageLink table")
- 
+
             else:
                 new_link = PageLink(
                     page_id_source=source_page.id,
@@ -519,13 +521,13 @@ generate_script:
                 db.refresh(new_link)
                 logger.info("Stored new navigation in PageLink table")
         ```
- 
+
       - Do NOT use any redirects table
       - Do NOT use init_db()
       - Do NOT use autotest module
- 
+
       - This database interaction should ONLY be used for navigation test cases
- 
+
       For CSS Selectors in test cases:
           - Use only the specific CSS selectors for element fields to be found as provided in the HTML page source
           - DO NOT provide any other CSS selector for any element field that is not present in the page source for that particular field
@@ -590,7 +592,7 @@ generate_script:
             - Only pause execution once per relevant element per test case step, avoiding redundant pauses.
           - IF CAPTCHA, OTP or FILE UPLOAD elements not present in Page Source: 
             - Do not include code for checking CAPTCHA, OTP, or file upload elements in the generated script unless mentioned in the HTML page source provided
- 
+
         If file download exists:
           - Check whether file upload is required/necessary before it based on the test case steps
           - If required, pause execution for manual upload at the appropriate step
@@ -598,11 +600,11 @@ generate_script:
           - Configure the test to automatically download the file into the operating system's default 'Downloads' directory (platform-aware: Windows, macOS, Linux)
           - Do not compare the downloaded file name as it may vary if it already exists
           - Only compare files before and after downloading to get the latest file
- 
+
         For color validations, use a generic method to check if the color is red, handling both rgb and rgba formats:
           - Use `getComputedStyle` to retrieve the color
           - Normalize and check for red (255, 0, 0) or named 'red'
- 
+
         For field validation:
           - Check HTML5 `:invalid` state for required fields
           - Look for error messages or classes (e.g., 'is-invalid', '.error') with partial matching
@@ -610,15 +612,15 @@ generate_script:
             - Fill the field with test data
             - Submit the form
             - Validate the expected error (class, message, or alert) using partial matching
- 
+
         For URL validations (e.g., redirection tests):
           - Compare ONLY the domain and path, ignoring the protocol (http/https)
           - Use Python's `urlparse` to extract and compare `netloc` (domain) and `path`
           - Example: For "http://www.example.com/about", compare only "www.example.com/about"
- 
+
         For navigation type test cases:
           - Do not include checks or pauses for OTP, CAPTCHA, or file upload elements unless explicitly required by the test case
- 
+
         For checkbox and radio button interactions:
           - Implement a robust, generic method to handle checkboxes and radio buttons across different pages
           - The method should:
@@ -630,7 +632,7 @@ generate_script:
             - Retry up to 3 times with a 1-second delay between attempts if the state cannot be set or verified
             - Log each attempt and any exceptions (e.g., `ElementClickInterceptedException`)
             - If the state cannot be set after retries, log an error and raise an exception
- 
+
         For date picker interactions:
           - Implement a robust method to handle date picker elements to avoid stale element references
           - The method should:
@@ -642,7 +644,7 @@ generate_script:
             - Implement a retry mechanism (up to 3 attempts) for locating and clicking the date element to handle dynamic updates
             - After selecting the date, verify that the input field reflects the chosen date
             - Log each step and any exceptions for debugging purposes
- 
+
           For UI validation tests involving CSS properties:
           - Retrieve computed styles using `getComputedStyle` and validate against expected patterns or presence of styles as present in the page source/UI
           - DO NOT assume consistency across elements (e.g., same font-family, font-size) unless explicitly specified in the page metadata; validate each element's properties individually

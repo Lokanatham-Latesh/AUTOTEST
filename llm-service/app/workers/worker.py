@@ -1380,7 +1380,15 @@ class WorkerService:
             db.close()
     
     def _run_page_pipeline(self, driver, page: Page, requested_by: int):
+        """
+        Full pipeline for a post-auth discovered page.
 
+        The driver passed in is already authenticated. We:
+        1. Capture its session cookies so subprocesses can restore the session.
+        2. Resolve real login credentials so scripts include a login block.
+        3. Pass auth_cookies to execute_page so _build_script_header injects
+           cookie-restoration code before the script's own get_driver() call.
+        """
         logger.info(f"[PIPELINE] Running pipeline | page_id={page.id}")
         db = SessionLocal()
         llm = LLMWrapper(db=db)
@@ -1393,13 +1401,80 @@ class WorkerService:
             prompt_manager=prompt_manager
         )
 
-        
-
         try:
+            # ── Capture session cookies from the authenticated driver ─────────
+            # These are passed all the way to execute_page so every subprocess
+            # browser can restore the login session via cookie injection.
+            auth_cookies = []
+            try:
+                auth_cookies = driver.get_cookies()
+                logger.info(
+                    f"[PIPELINE] Captured {len(auth_cookies)} session cookies "
+                    f"| page_id={page.id}"
+                )
+            except Exception as _ce:
+                logger.warning(f"[PIPELINE] Cookie capture failed: {_ce}")
+
+            # ── Resolve real login credentials for script generation ───────────
+            # Without real credentials, login_instructions = "no" and scripts
+            # are generated without any login block.
+            import re as _re
+            username, password = None, None
+            try:
+                auth_tc = self._get_login_test_case(db, page.id)
+                if not auth_tc:
+                    # Login page may differ from this page — search site-wide
+                    auth_tc = (
+                        db.query(TestCase)
+                        .join(TestScenario, TestScenario.id == TestCase.test_scenario_id)
+                        .join(Page, Page.id == TestCase.page_id)
+                        .filter(
+                            Page.site_id              == page.site_id,
+                            TestCase.is_valid         == True,
+                            TestCase.is_valid_default == True,
+                            TestScenario.requires_auth == True,
+                        )
+                        .first()
+                    )
+                if auth_tc:
+                    resolved = TestCredentialService(llm=llm, logger=logger).resolve(
+                        auth_tc.page_id, auth_tc.data.get("test_data", {})
+                    )
+                    selectors = auth_tc.data.get("selectors", {})
+                    def _bare(sel):
+                        if not sel: return None
+                        if sel.startswith("#"): return sel[1:]
+                        m = _re.search(r'name=["\']([^"\']+)["\']', sel)
+                        return m.group(1) if m else (sel.split("#")[-1] if "#" in sel else sel)
+                    username = resolved.get(_bare(selectors.get("username", ""))) or next(
+                        (v for k, v in resolved.items() if "user" in k.lower() or "email" in k.lower()), None
+                    )
+                    password = resolved.get(_bare(selectors.get("password", ""))) or next(
+                        (v for k, v in resolved.items() if "pass" in k.lower()), None
+                    )
+                    logger.info(
+                        f"[PIPELINE] Resolved credentials | "
+                        f"username={'set' if username else 'missing'}"
+                    )
+            except Exception as _ce:
+                logger.warning(f"[PIPELINE] Credential resolution failed: {_ce}")
+
+            def _set_status(new_status):
+                """Update page status using a fresh DB session to avoid stale connections."""
+                try:
+                    with SessionLocal() as _sdb:
+                        _p = _sdb.query(Page).filter(Page.id == page.id).first()
+                        if _p:
+                            _p.status     = new_status
+                            _p.updated_on = datetime.utcnow()
+                            _p.updated_by = requested_by
+                            _sdb.commit()
+                            logger.info(f"[PIPELINE] Status -> {new_status} | page_id={page.id}")
+                except Exception as _se:
+                    logger.warning(f"[PIPELINE] Status update failed: {_se}")
+
             # STEP 1 — ANALYZE PAGE
-            page.status = PageStatus.GENERATING_METADATA
-            db.commit()
-            asyncio.run(self._notify_ws(page, requested_by))
+            _set_status(PageStatus.GENERATING_METADATA)
 
             analyzer.analyze_page(
                 page_id=page.id,
@@ -1408,10 +1483,7 @@ class WorkerService:
             )
 
             # STEP 2 — GENERATE SCENARIOS
-            page.status = PageStatus.GENERATING_TEST_SCENARIOS
-            db.commit()
-
-            asyncio.run(self._notify_ws(page, requested_by))
+            _set_status(PageStatus.GENERATING_TEST_SCENARIOS)
 
             TestScenarioService(
                 llm=llm,
@@ -1420,10 +1492,7 @@ class WorkerService:
             ).generate(page.id, requested_by)
 
             # STEP 3 — GENERATE TEST CASES
-            page.status = PageStatus.GENERATING_TEST_CASES
-            db.commit()
-
-            asyncio.run(self._notify_ws(page, requested_by))
+            _set_status(PageStatus.GENERATING_TEST_CASES)
 
             TestCaseService(
                 llm=llm,
@@ -1432,39 +1501,61 @@ class WorkerService:
             ).generate(page.id, requested_by)
 
             # STEP 4 — GENERATE TEST SCRIPTS
-            page.status = PageStatus.GENERATING_TEST_SCRIPTS
-            db.commit()
+            _set_status(PageStatus.GENERATING_TEST_SCRIPTS)
 
-            asyncio.run(self._notify_ws(page, requested_by))
-
+            # When auth_cookies are available, the header handles authentication
+            # via cookies. The script must NOT also try to login — the login form
+            # does not exist on post-auth pages (inventory.html etc.).
+            _script_require_login = not bool(auth_cookies)
             TestScriptService(
                 llm=llm,
                 prompt_manager=prompt_manager,
                 logger=logger
             ).generate_scripts_for_page(
-               page,
-               require_login=True,
-               username=None,
-               password=None,
-               requested_by=requested_by
-            )
-            logger.info(f"[PIPELINE] Executing tests | page_id={page.id}")
-            TestExecutionService(
-                llm=LLMWrapper(db=db),
-                prompt_manager=PromptManager(),
-                logger=logger,
-            ).execute_page(
                 page,
-                requested_by,
-                None,  
-                None   
+                require_login=_script_require_login,
+                username=username if _script_require_login else None,
+                password=password if _script_require_login else None,
+                requested_by=requested_by
             )
 
-            page.status = PageStatus.DONE
-            db.commit()
+            # STEP 5 — EXECUTE TESTS
+            # Each step uses its own SessionLocal — pass a fresh LLMWrapper
+            # so we are not reusing the potentially-expired pipeline db session.
+            logger.info(f"[PIPELINE] Executing tests | page_id={page.id}")
+            with SessionLocal() as exec_db:
+                TestExecutionService(
+                    llm=LLMWrapper(db=exec_db),
+                    prompt_manager=PromptManager(),
+                    logger=logger,
+                ).execute_page(
+                    page,
+                    requested_by,
+                    scenario_id=None,
+                    test_suite_id=None,
+                    auth_cookies=auth_cookies,
+                )
 
-            asyncio.run(self._notify_ws(page, requested_by))
-        
+            # ── Mark page as DONE in a fresh session ─────────────────────────
+            # The pipeline db session has been open for the entire run (can be
+            # 10-30 minutes). By this point the underlying DB connection may have
+            # expired or been recycled by the connection pool, causing db.commit()
+            # to silently fail or rollback. Using a fresh session guarantees the
+            # DONE status is actually written to the database.
+            try:
+                with SessionLocal() as fresh_db:
+                    fresh_page = fresh_db.query(Page).filter(Page.id == page.id).first()
+                    if fresh_page:
+                        fresh_page.status     = PageStatus.DONE
+                        fresh_page.updated_on = datetime.utcnow()
+                        fresh_page.updated_by = requested_by
+                        fresh_db.commit()
+                        logger.info(f"[PIPELINE] Page status set to DONE | page_id={page.id}")
+                    else:
+                        logger.warning(f"[PIPELINE] Page {page.id} not found for DONE update")
+            except Exception as _done_err:
+                logger.error(f"[PIPELINE] Failed to set DONE status: {_done_err}")
+
         finally:
             db.close()
         logger.info(f"[PIPELINE] Completed pipeline | page_id={page.id}")
