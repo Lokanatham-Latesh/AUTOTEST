@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { siteApi } from '../apis/siteApi'
 import type { CreateSitePayload } from '../apis/siteApi'
 import type { SortType } from '@/types'
+import type { GetSiteByIdResponse } from '@/types/site'
 
 export const useSitesQuery = ({
   page,
@@ -122,6 +123,16 @@ export const useSitePagesQuery = ({
         search,
         sort,
       }),
+
+    enabled: !!siteId,
+  })
+}
+
+export const useSiteByIdQuery = (siteId: number) => {
+  return useQuery<GetSiteByIdResponse>({
+    queryKey: ['site-by-id', siteId],
+
+    queryFn: () => siteApi.getSiteById(siteId),
 
     enabled: !!siteId,
   })
