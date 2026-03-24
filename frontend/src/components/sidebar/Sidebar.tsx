@@ -7,7 +7,8 @@ import mindfireLogo from '@/assets/mindfire-logo.png'
 import { useSidebar } from '@/contexts/SidebarContext'
 
 export const Sidebar: React.FC = () => {
-  const { isCollapsed, items, showBack, backTo, backLabel, settingCategories } = useSidebar()
+  const { isCollapsed, items, showBack, backTo, backLabel, settingCategories, siteTitle } =
+    useSidebar()
 
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -69,7 +70,6 @@ export const Sidebar: React.FC = () => {
                         )}
                       />
 
-                      {/* TEXT */}
                       <span className={cn(isActive && 'text-[#FC0101]')}>{cat.title}</span>
                     </Link>
                   )
@@ -79,6 +79,13 @@ export const Sidebar: React.FC = () => {
           </React.Fragment>
         ))}
       </nav>
+
+      {siteTitle && !isCollapsed && (
+        <div className="border-t border-border p-4 text-sm text-muted-foreground">
+          <div className="font-semibold text-red-500 text-lg truncate">{siteTitle}</div>{' '}
+          <div className="text-sm text-muted-foreground">Current Site</div>
+        </div>
+      )}
     </aside>
   )
 }

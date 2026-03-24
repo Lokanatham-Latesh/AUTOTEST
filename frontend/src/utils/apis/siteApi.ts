@@ -1,4 +1,5 @@
 // import sites from '@/mock/sites.json'
+import type { GetSiteByIdResponse } from '@/types/site'
 import api from '../axios'
 
 export type Site = {
@@ -110,5 +111,9 @@ export const siteApi = {
   },
   deleteSite: async (siteId: number): Promise<void> => {
     await api.delete(`/sites/${siteId}`)
+  },
+  getSiteById: async (siteId: number): Promise<GetSiteByIdResponse> => {
+    const { data } = await api.get(`/sites/${siteId}`)
+    return data
   },
 }

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useMemo, useEffect } from '
 import { useLocation } from 'react-router-dom'
 import { SIDEBAR_CONFIGS, type SidebarItem, type SidebarConfig } from '@/constants/sidebarConfig'
 import { settingApi } from '@/utils/apis/settingApi'
+import { useSiteByIdQuery } from '@/utils/queries/sitesQuery'
+
 type SettingCategory = {
   id: number
   title: string
@@ -25,9 +27,12 @@ type SidebarContextType = {
   backLabel: string | null
   currentConfig: SidebarConfig
   settingCategories: SettingCategory[]
+
+  siteTitle?: string
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined)
+
 const toSlug = (title: string) => title.toLowerCase().replace(/\s+/g, '-')
 
 export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -36,11 +41,21 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { pathname } = useLocation()
   const [settingCategories, setSettingCategories] = useState<SettingCategory[]>([])
 
-  // Find matching sidebar config based on current path
+  //  Extract siteId from URL
+  const siteId = useMemo(() => {
+    const match = pathname.match(/^\/site-info\/(\d+)/)
+    return match ? Number(match[1]) : null
+  }, [pathname])
+
+  //  Call API
+  const { data: siteData } = useSiteByIdQuery(siteId || 0)
+
+  // Sidebar config
   const currentConfig = useMemo(() => {
     return SIDEBAR_CONFIGS.find((config) => config.pathPattern.test(pathname)) || SIDEBAR_CONFIGS[0]
   }, [pathname])
 
+  // Settings categories
   useEffect(() => {
     if (!settingCategories.length) {
       settingApi.getSettingCategories().then((res) => {
@@ -55,38 +70,27 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [settingCategories.length])
 
   const value: SidebarContextType = {
-    // Mobile menu controls
     isOpen,
     toggle: () => setIsOpen((prev) => !prev),
     close: () => setIsOpen(false),
 
-    // Desktop collapse controls
     isCollapsed,
     toggleCollapse: () => setIsCollapsed((prev) => !prev),
 
-    // Current sidebar items and configuration
     items: currentConfig.items,
     showBack: currentConfig.showBack ?? false,
     backTo: currentConfig.backTo ?? null,
     backLabel: currentConfig.backLabel ?? null,
     currentConfig,
     settingCategories,
+
+    // ✅ Pass site title
+    siteTitle: siteData?.site_title,
   }
 
   return <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>
 }
 
-/**
- * Hook to access sidebar state and configuration
- *
- * @returns {SidebarContextType} Sidebar context value
- * @throws {Error} If used outside SidebarProvider
- *
- * @example
- * ```tsx
- * const { isCollapsed, items, toggleCollapse } = useSidebar()
- * ```
- */
 export const useSidebar = (): SidebarContextType => {
   const context = useContext(SidebarContext)
   if (!context) {
