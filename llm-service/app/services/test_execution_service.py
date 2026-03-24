@@ -66,17 +66,16 @@ class TestExecutionService:
         self,
         page,
         requested_by: int,
-        scenario_id: int = None,   # None = all scenarios, int = targeted
-        test_suite_id: int = None, # optional grouping handle
+        scenario_id: int = None,    # None = all scenarios, int = targeted
+        test_suite_id: int = None,  # optional grouping handle
+        auth_cookies: list = None,  # Selenium cookies from an authenticated browser
     ):
         """
         Execute all (or one) scenario scripts for a page and persist results.
 
-        Args:
-            page:          ORM Page object (page_source populated).
-            requested_by:  User ID for executed_by column.
-            scenario_id:   If set, only execute this specific scenario.
-            test_suite_id: Optional test suite FK to stamp on each row.
+        auth_cookies: if provided, every subprocess browser will have these
+        cookies injected before navigating — restoring the login session
+        without re-running the full login flow.
         """
         with SessionLocal() as db:
             query = db.query(TestScenario).filter(TestScenario.page_id == page.id)
@@ -98,6 +97,7 @@ class TestExecutionService:
                     page_id=page.id,
                     test_suite_id=test_suite_id,
                     requested_by=requested_by,
+                    auth_cookies=auth_cookies,
                 )
 
             db.commit()
@@ -109,10 +109,11 @@ class TestExecutionService:
     # SCENARIO-LEVEL EXECUTION
     # -----------------------------------------------------------------------
 
-    def _execute_scenario(self, db, scenario, page_id, test_suite_id, requested_by):
+    def _execute_scenario(self, db, scenario, page_id, test_suite_id, requested_by,
+                          auth_cookies: list = None):
         """
-        Run a single scenario's script and persist one TestExecution row
-        per TestCase belonging to that scenario.
+        Run a scenario's script once per TestCase.
+        auth_cookies: injected into each subprocess browser to restore login session.
         """
         if not scenario.script or not scenario.script.strip():
             self.logger.warning(
@@ -176,25 +177,73 @@ class TestExecutionService:
             )
             return
 
-        # Iterate per test case and run the script with injected test-case data.
+        # Resolve credentials once for all test cases in this scenario
+        resolved_credentials = {}
+        try:
+            from app.services.test_credential_service import TestCredentialService
+            cred_service = TestCredentialService(llm=self.llm, logger=self.logger)
+            for tc in test_cases:
+                raw_td = (tc.data or {}).get("test_data", {})
+                if raw_td:
+                    resolved_credentials[tc.id] = cred_service.resolve(page_id, raw_td)
+        except Exception as e:
+            self.logger.warning(f"[EXEC] Credential resolution failed: {e} — using raw test_data")
+
+        # Run the script exactly once per test case
         for tc in test_cases:
             try:
                 self.logger.info(
                     f"[EXEC] Running tc_id={tc.id} | scenario_id={scenario.id} title='{tc.title}'"
                 )
 
-                # Ensure test case data is JSON-serializable
                 tc_data = tc.data or {}
                 if isinstance(tc_data, str):
                     try:
                         tc_data = json.loads(tc_data)
                     except Exception:
-                        # leave as string if not JSON
                         tc_data = {"value": tc_data}
 
-                # Execute script with a small header that provides `__TEST_CASE__`
-                # variable to the script runtime.
-                header = f"import json\n__TEST_CASE__ = {json.dumps(tc_data)}\n"
+                # Replace raw test_data with resolved credentials
+                resolved_td = resolved_credentials.get(tc.id)
+                if resolved_td:
+                    tc_data = {**tc_data, "test_data": resolved_td}
+
+                # Build the single-test-case payload the script reads at runtime
+                # Normalize steps: ensure URLs are extractable regardless of
+                # whether the LLM used "Navigate to", "navigate to", "Go to", etc.
+                # Scripts that split on lowercase "navigate to " will now work.
+                _raw_steps = tc_data.get("steps", [])
+                _norm_steps = []
+                for _s in _raw_steps:
+                    if isinstance(_s, str):
+                        # Lowercase only the navigation keyword, preserve the URL
+                        import re as _re2
+                        _norm_steps.append(
+                            _re2.sub(
+                                r'^(Navigate|Go|Open|Visit|Launch)\s+to\s+',
+                                'navigate to ',
+                                _s,
+                                flags=_re2.IGNORECASE
+                            )
+                        )
+                    else:
+                        _norm_steps.append(_s)
+
+                tc_payload = {
+                    "name":             tc.title,
+                    "steps":            _norm_steps,
+                    "selectors":        tc_data.get("selectors", {}),
+                    "test_data":        tc_data.get("test_data", {}),
+                    "expected_outcome": tc.expected_outcome or {},
+                    "validation":       tc.validation or "",
+                    "is_valid":         tc.is_valid,
+                    "is_valid_default": tc.is_valid_default,
+                }
+
+                # Build the script header via the dedicated helper.
+                # It handles __TEST_CASE__ injection + auth cookie restoration
+                # in a clean, testable way.
+                header = self._build_script_header(tc_payload, auth_cookies)
                 script_with_context = header + (scenario.script or "")
 
                 result = self.execute_test_script(script_with_context)
@@ -366,6 +415,148 @@ class TestExecutionService:
                 f"[EXEC] Inserted execution | "
                 f"scenario_id={scenario.id} tc_id={tc_id} status={status}"
             )
+
+    # -----------------------------------------------------------------------
+    # SCRIPT HEADER BUILDER
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _build_script_header(tc_payload: dict, auth_cookies: list = None) -> str:
+        """
+        Build the Python source block prepended to every generated script.
+
+        1. __TEST_CASE__ injection — uses repr() not json.dumps() so that
+           Python booleans (True/False/None) are emitted, not JSON literals
+           (true/false/null) which cause NameError in the subprocess.
+
+        2. Auth session restoration — when auth_cookies is provided:
+           a) Creates a fresh Selenium driver.
+           b) Navigates to the site origin so the domain accepts cookies.
+           c) Injects every session cookie.
+           d) Refreshes so the server sees the restored session.
+           e) CRITICALLY: monkey-patches sys.modules so that when the
+              generated script calls `from app.services.selenium_driver
+              import get_driver; driver = get_driver()` it receives this
+              already-authenticated driver instead of opening a new one.
+              Without the monkey-patch the script's own get_driver() call
+              would replace the authenticated driver with a fresh one.
+        """
+        # Normalize navigation steps so scripts using case-sensitive split work.
+        # Steps like "Navigate to URL" must become "navigate to URL" because
+        # generated scripts typically do: step.split("navigate to ", 1)[1]
+        import re as _re_norm
+        _normalized = dict(tc_payload)
+        _normalized["steps"] = [
+            _re_norm.sub(
+                r"^(Navigate|Go|Open|Visit|Launch)\s+to\s+",
+                "navigate to ",
+                s,
+                flags=_re_norm.IGNORECASE
+            ) if isinstance(s, str) else s
+            for s in tc_payload.get("steps", [])
+        ]
+
+        lines = [
+            "import json",
+            "import time",
+            f"__TEST_CASE__ = {repr(_normalized)}",
+            "",
+        ]
+
+        if auth_cookies:
+            first_domain = next(
+                (c.get("domain", "").lstrip(".") for c in auth_cookies if c.get("domain")),
+                ""
+            )
+            origin_url = (
+                f"https://{first_domain}" if first_domain
+                else tc_payload.get("page_origin", "")
+            )
+
+            lines += [
+                "# ── Auth session restoration ────────────────────────────────────",
+                "import sys, types",
+                "from selenium.webdriver.support.ui import WebDriverWait as _WDW",
+                "from selenium.webdriver.support import expected_conditions as _EC",
+                "from app.services.selenium_driver import get_driver as _gd_real",
+                "",
+                "# Create the authenticated browser",
+                "_auth_driver = _gd_real()",
+                "",
+                f"_origin  = {repr(origin_url)}",
+                f"_cookies = {repr(auth_cookies)}",
+                "",
+                "# Step 1: visit site origin so browser accepts cookies for this domain",
+                "if _origin:",
+                "    try:",
+                "        _auth_driver.get(_origin)",
+                "        _WDW(_auth_driver, 10).until(",
+                "            lambda d: d.execute_script('return document.readyState') == 'complete'",
+                "        )",
+                "    except Exception:",
+                "        pass",
+                "",
+                "# Step 2: inject session cookies",
+                "for _c in _cookies:",
+                "    try:",
+                "        _safe = {k: v for k, v in _c.items()",
+                "                 if k in ('name','value','path','domain','secure',",
+                "                          'httpOnly','expiry','sameSite')}",
+                "        _auth_driver.add_cookie(_safe)",
+                "    except Exception:",
+                "        pass",
+                "",
+                "# Step 3: refresh so server sees the restored session",
+                "try:",
+                "    _auth_driver.refresh()",
+                "    _WDW(_auth_driver, 10).until(",
+                "        lambda d: d.execute_script('return document.readyState') == 'complete'",
+                "    )",
+                "except Exception:",
+                "    pass",
+                "",
+                "# Step 4: monkey-patch get_driver so the script reuses this",
+                "# authenticated driver instead of opening a fresh one.",
+                "# This is the critical step — without it the script's own",
+                "# `driver = get_driver()` call would discard the session.",
+                "_patch_mod = types.ModuleType('app.services.selenium_driver')",
+                "_patch_mod.get_driver = lambda: _auth_driver",
+                "sys.modules['app.services.selenium_driver'] = _patch_mod",
+                "",
+                "# Expose as module-level `driver` so scripts that reference",
+                "# the name directly (without calling get_driver) also work.",
+                "driver = _auth_driver",
+                "",
+                "# Step 5: Navigate directly to the target page so the script starts",
+                "# on the right page. This means when the script navigates to its",
+                "# starting_url, the browser is already there with a valid session.",
+                f"_target_page_url = {repr(tc_payload.get('page_url', ''))}",
+                "if _target_page_url:",
+                "    try:",
+                "        _auth_driver.get(_target_page_url)",
+                "        _WDW(_auth_driver, 10).until(",
+                "            lambda d: d.execute_script('return document.readyState') == 'complete'",
+                "        )",
+                "    except Exception:",
+                "        pass",
+                "",
+                "# Step 6: Set a flag that suppresses redundant login blocks in",
+                "# already-generated scripts that check for this flag.",
+                "# Scripts generated before this fix may still attempt login — this",
+                "# flag allows those scripts to skip the login block gracefully.",
+                "__COOKIES_AUTH_DONE__ = True",
+                "# ── End auth session restoration ─────────────────────────────────",
+                "",
+            ]
+        else:
+            # No auth — initialise driver normally at module level
+            lines += [
+                "from app.services.selenium_driver import get_driver as _gd",
+                "driver = _gd()",
+                "",
+            ]
+
+        return "\n".join(lines) + "\n"
 
     # -----------------------------------------------------------------------
     # SCRIPT EXECUTION  (from existing execute_test_script logic)
