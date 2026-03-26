@@ -83,7 +83,7 @@ export const Sidebar: React.FC = () => {
       {siteTitle && !isCollapsed && (
         <div className="border-t border-border p-4 text-sm text-muted-foreground">
           <div className="font-semibold text-red-500 text-lg truncate">{siteTitle}</div>{' '}
-          <div className="text-sm text-muted-foreground">Current Site</div>
+          <div className="text-xs text-muted-foreground">Current Site</div>
         </div>
       )}
     </aside>

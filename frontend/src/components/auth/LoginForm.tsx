@@ -85,11 +85,11 @@ const LoginForm: React.FC = () => {
                 )}
               </div>
 
-              <div className="text-right">
+              {/* <div className="text-right">
                 <Link to="/forgot-password" className="text-sm text-gray-600 hover:text-black">
                   Forgot Password?
                 </Link>
-              </div>
+              </div> */}
 
               <Button
                 type="submit"
