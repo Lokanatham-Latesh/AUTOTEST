@@ -6,28 +6,46 @@ import StatusBadge from '@/components/status/StatusBadge'
 import StatusDots from '@/components/status/StatusDots'
 import { useWebSocketContext } from '@/contexts/WebSocketProvider'
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+
+import {
+  useCreateSiteAttributes,
+  useDeleteSiteAttribute,
+  useGetSiteAttributes,
+  useUpdateSiteAttribute,
+} from '@/utils/queries/siteAttributeQuery'
+
 import type { Attribute } from '@/types/siteAttribute'
 import SiteAttributeSheet from './SiteAttributeSheet'
+
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
+import { ConfirmModal } from '../common/ConfirmModal'
 
 const SiteInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
+  const siteId = Number(id)
+
   const { data, isLoading, isError } = useSiteInfoQuery(id || '')
+  const { data: attrData } = useGetSiteAttributes(siteId)
+
+  const { mutate: createAttr, isPending: isCreating } = useCreateSiteAttributes()
+  const { mutate: deleteAttr, isPending: isDeleting } = useDeleteSiteAttribute()
+  const { mutate: updateAttr, isPending: isUpdating } = useUpdateSiteAttribute()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+
   const queryClient = useQueryClient()
   const { lastMessage } = useWebSocketContext()
 
-  const [attributes, setAttributes] = useState<Attribute[]>([
-    { id: 1, site_id: Number(id), attribute_key: 'env', attribute_title: 'Environment' },
-    { id: 2, site_id: Number(id), attribute_key: 'region', attribute_title: 'Region' },
-  ])
-
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editData, setEditData] = useState<Attribute | null>(null)
+
+  const attributes = attrData?.items || []
 
   useEffect(() => {
     if (!lastMessage) return
@@ -53,25 +71,82 @@ const SiteInfoPage: React.FC = () => {
       }
     })
   }, [lastMessage, queryClient, id])
-
-  const handleCreate = (data: Attribute[]) => {
-    const newItems = data.map((d, i) => ({
-      id: Date.now() + i,
-      ...d,
-    }))
-    setAttributes((prev) => [...prev, ...newItems])
+  const handleDeleteClick = (id: number) => {
+    setSelectedId(id)
+    setConfirmOpen(true)
   }
 
-  const handleUpdate = (data: Attribute[]) => {
-    const updated = data[0]
+  /* ================= ERROR HANDLING ================= */
+  const handleUniqueError = (err: any) => {
+    const message =
+      err?.response?.data?.detail || err?.response?.data?.message || 'Something went wrong'
 
-    setAttributes((prev) =>
-      prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
+    if (message.toLowerCase().includes('unique')) {
+      toast.error('Key should be unique')
+    } else {
+      toast.error(message)
+    }
+  }
+
+  /* ================= CREATE ================= */
+  const handleCreate = (rows: Attribute[]) => {
+    const payload = {
+      site_id: siteId,
+      attributes: rows.map((row) => ({
+        attribute_key: row.attribute_key,
+        attribute_title: row.attribute_title,
+      })),
+    }
+
+    createAttr(payload, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['site-attributes', siteId] })
+        setSheetOpen(false)
+        toast.success('Attributes created successfully')
+      },
+      onError: handleUniqueError,
+    })
+  }
+
+  /* ================= UPDATE ================= */
+  const handleUpdate = (rows: Attribute[]) => {
+    const row = rows[0]
+
+    updateAttr(
+      {
+        id: row.id!,
+        payload: {
+          attribute_key: row.attribute_key,
+          attribute_title: row.attribute_title,
+        },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['site-attributes', siteId] })
+          setSheetOpen(false)
+          toast.success('Attribute updated successfully')
+        },
+        onError: handleUniqueError,
+      },
     )
   }
 
-  const handleDelete = (id: number) => {
-    setAttributes((prev) => prev.filter((item) => item.id !== id))
+  /* ================= DELETE ================= */
+  const handleConfirmDelete = () => {
+    if (!selectedId) return
+
+    deleteAttr(selectedId, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['site-attributes', siteId] })
+        toast.success('Deleted successfully')
+        setConfirmOpen(false)
+        setSelectedId(null)
+      },
+      onError: () => {
+        toast.error('Delete failed')
+        setConfirmOpen(false)
+      },
+    })
   }
 
   if (isLoading) {
@@ -99,12 +174,9 @@ const SiteInfoPage: React.FC = () => {
           <div className="bg-[#FFF8F8] border-b px-4 py-3">
             <h2 className="text-[15px] font-semibold">Analyze Process</h2>
           </div>
-
-          <div className="p-5 flex justify-between">
-            <div>
-              <StatusBadge status={data.analyzeStatus} />
-              <StatusDots status={data.analyzeStatus} />
-            </div>
+          <div className="p-5">
+            <StatusBadge status={data.analyzeStatus} />
+            <StatusDots status={data.analyzeStatus} />
           </div>
         </div>
 
@@ -150,7 +222,6 @@ const SiteInfoPage: React.FC = () => {
         </div>
 
         {/* SITE ATTRIBUTES */}
-        {/* SITE ATTRIBUTES */}
         <div className="border border-[#E4D7D7] bg-white rounded-[6px]">
           <div className="bg-[#FFF8F8] border-b py-3 px-4 flex justify-between items-center">
             <h2 className="text-[15px] font-semibold">Site Attributes</h2>
@@ -190,17 +261,14 @@ const SiteInfoPage: React.FC = () => {
                           setEditData(attr)
                           setSheetOpen(true)
                         }}
+                        className="cursor-pointer"
                       >
                         Update
                       </DropdownMenuItem>
 
                       <DropdownMenuItem
-                        onClick={() => {
-                          if (attr.id !== undefined) {
-                            handleDelete(attr.id)
-                          }
-                        }}
-                        className="text-red-500"
+                        onClick={() => handleDeleteClick(attr.id!)}
+                        className="text-red-500 cursor-pointer"
                       >
                         Delete
                       </DropdownMenuItem>
@@ -218,7 +286,22 @@ const SiteInfoPage: React.FC = () => {
         onClose={() => setSheetOpen(false)}
         onSubmit={editData ? handleUpdate : handleCreate}
         editData={editData}
-        siteId={Number(id)}
+        siteId={siteId}
+        isLoading={isCreating || isUpdating}
+      />
+      <ConfirmModal
+        open={confirmOpen}
+        title="Delete Attribute"
+        message="Are you sure you want to delete this attribute?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isDeleting} 
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          setConfirmOpen(false)
+          setSelectedId(null)
+        }}
       />
     </div>
   )
