@@ -1,4 +1,4 @@
-import type { CreateSiteAttributePayload, SiteAttributeResponse } from '@/types/siteAttribute'
+import type { CreateSiteAttributePayload, SiteAttribute, SiteAttributeResponse, UpdateSiteAttributePayload } from '@/types/siteAttribute'
 import api from '../axios'
 
 export const siteAttributeApi = {
@@ -23,6 +23,17 @@ export const siteAttributeApi = {
    */
   getSiteAttributes: async (siteId: number): Promise<SiteAttributeResponse> => {
     const { data } = await api.get(`/site-attributes/site/${siteId}`)
+    return data
+  },
+
+  /**
+   * Update site attribute
+   */
+  updateSiteAttribute: async (
+    attributeId: number,
+    payload: UpdateSiteAttributePayload,
+  ): Promise<SiteAttribute> => {
+    const { data } = await api.put(`/site-attributes/${attributeId}`, payload)
     return data
   },
 }

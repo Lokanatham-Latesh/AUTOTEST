@@ -7,7 +7,18 @@ import { X, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Attribute, EditableField, Props } from '@/types/siteAttribute'
 
-const SiteAttributeSheet: React.FC<Props> = ({ open, onClose, onSubmit, editData, siteId }) => {
+type PropsExtended = Props & {
+  isLoading?: boolean
+}
+
+const SiteAttributeSheet: React.FC<PropsExtended> = ({
+  open,
+  onClose,
+  onSubmit,
+  editData,
+  siteId,
+  isLoading = false,
+}) => {
   const isEdit = !!editData
 
   const [rows, setRows] = useState<Attribute[]>([
@@ -30,12 +41,10 @@ const SiteAttributeSheet: React.FC<Props> = ({ open, onClose, onSubmit, editData
 
   const handleAddRow = () => {
     const last = rows[rows.length - 1]
-
     if (!last.attribute_key || !last.attribute_title) {
       toast.error('Fill current row before adding new')
       return
     }
-
     setRows([...rows, { site_id: siteId, attribute_key: '', attribute_title: '' }])
   }
 
@@ -50,29 +59,23 @@ const SiteAttributeSheet: React.FC<Props> = ({ open, onClose, onSubmit, editData
         return
       }
     }
-
     onSubmit(rows)
-    onClose()
   }
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
       <SheetContent side="right" className="w-[420px] flex flex-col p-0">
-        {/* HEADER */}
         <SheetHeader className="border-b px-6 py-4 relative">
           <SheetTitle>{isEdit ? 'Update Site Attribute' : 'Add Site Attributes'}</SheetTitle>
-
-          <button onClick={() => onClose()} className="absolute right-4 top-4">
+          <button onClick={onClose} className="absolute right-4 top-4">
             <X className="h-4 w-4" />
           </button>
         </SheetHeader>
 
-        {/* BODY */}
         <div className="flex-1 px-6 py-6 space-y-4 overflow-y-auto">
           {rows.map((row, index) => (
             <div key={index} className="flex gap-2 items-end">
-              {/* KEY */}
-              <div className="flex-1">
+              <div className="flex-1 flex flex-col gap-2">
                 <Label>Key</Label>
                 <Input
                   value={row.attribute_key}
@@ -80,8 +83,7 @@ const SiteAttributeSheet: React.FC<Props> = ({ open, onClose, onSubmit, editData
                 />
               </div>
 
-              {/* TITLE */}
-              <div className="flex-1">
+              <div className="flex-1 flex flex-col gap-2">
                 <Label>Title</Label>
                 <Input
                   value={row.attribute_title}
@@ -89,7 +91,6 @@ const SiteAttributeSheet: React.FC<Props> = ({ open, onClose, onSubmit, editData
                 />
               </div>
 
-              {/* DELETE */}
               {!isEdit && (
                 <button
                   onClick={() => handleRemoveRow(index)}
@@ -101,7 +102,6 @@ const SiteAttributeSheet: React.FC<Props> = ({ open, onClose, onSubmit, editData
             </div>
           ))}
 
-          {/* ADD MORE */}
           {!isEdit && (
             <button onClick={handleAddRow} className="text-red-500 text-sm cursor-pointer">
               + Add More
@@ -109,18 +109,18 @@ const SiteAttributeSheet: React.FC<Props> = ({ open, onClose, onSubmit, editData
           )}
         </div>
 
-        {/* FOOTER */}
         <SheetFooter className="border-t px-6 py-4">
           <div className="flex justify-end gap-2 w-full">
-            <Button variant="outline" className="cursor-pointer" onClick={() => onClose()}>
+            <Button variant="outline" onClick={onClose} className="cursor-pointer">
               Cancel
             </Button>
 
             <Button
               onClick={handleSubmit}
-              className="bg-red-500 hover:bg-red-600 cursor-pointer text-white"
+              disabled={isLoading}
+              className="bg-red-500 hover:bg-red-600 text-white cursor-pointer"
             >
-              {isEdit ? 'Update' : 'Save'}
+              {isEdit ? 'Update' : isLoading ? 'Saving...' : 'Save'}
             </Button>
           </div>
         </SheetFooter>

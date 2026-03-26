@@ -33,3 +33,8 @@ export type CreateSiteAttributePayload = {
     attribute_title: string
   }[]
 }
+
+export type UpdateSiteAttributePayload = {
+  attribute_key: string
+  attribute_title: string
+}
