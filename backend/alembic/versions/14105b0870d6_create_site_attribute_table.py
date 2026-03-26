@@ -21,9 +21,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.create_table('site_attribute',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False, primary_key=True),
         sa.Column('site_id', sa.Integer(), nullable=False),
-        sa.Column('attribute_key', sa.String(length=50), nullable=False),
+        sa.Column('attribute_key', sa.String(length=50), nullable=False, unique=True),
         sa.Column('attribute_title', sa.String(length=200), nullable=False),
     )
 

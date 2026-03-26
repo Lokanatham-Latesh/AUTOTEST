@@ -22,8 +22,8 @@ def upgrade() -> None:
     """Upgrade schema."""
 
     op.create_table('test_suite_execution',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('test_suite_id', sa.Integer(), nullable=False),
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False, primary_key=True),
+        sa.Column('test_suite_id', sa.Integer(), sa.ForeignKey('test_suite.id'), nullable=False),
         sa.Column('status', sa.Enum('pending', 'running', 'passed', 'partially_passed', 'failed', 'error'), nullable=False),
         sa.Column('started_at', sa.DateTime(), nullable=True),
         sa.Column('ended_at', sa.DateTime(), nullable=True),

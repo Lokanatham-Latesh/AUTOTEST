@@ -21,6 +21,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
 
+    op.alter_column('test_suite', 'site_id', existing_type=sa.Integer(), nullable=False)
+    op.create_foreign_key(None, 'test_suite', 'site', ['site_id'], ['id'])
+    op.create_index(op.f('ix_test_suite_site_id'), 'test_suite', ['site_id'], unique=False)
     op.add_column(
         "test_suite",
         sa.Column("description", sa.String(200), nullable=False)
@@ -45,6 +48,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_index(op.f('ix_test_suite_site_id'), table_name='test_suite')
+    op.drop_constraint(None, 'test_suite', type_='foreignkey')
+    op.alter_column('test_suite', 'site_id', existing_type=sa.Integer(), nullable=True)
     op.drop_column("test_suite", "description")
     op.drop_column("test_suite", "status")
     op.drop_column("test_suite", "flow_definition")

@@ -12,7 +12,6 @@ class TestSuite(Base):
     site_id: Mapped[int] = mapped_column(ForeignKey("site.id"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     # counts and id lists are stored in dedicated fields per XLSX
-    description: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     flow_definition: Mapped[dict] = mapped_column(JSON, nullable=False)
     scenario_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
