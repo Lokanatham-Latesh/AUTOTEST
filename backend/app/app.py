@@ -34,6 +34,7 @@ from app.routers.function import router as function_router
 from app.routers.test_case import router as test_case_router
 from app.routers.test_execution import router as test_execution_router
 from app.routers.site_attribute import router as site_attribute_router
+from app.routers.test_suite import router as test_suite_router
 
 
 @asynccontextmanager
@@ -154,6 +155,7 @@ def create_app() -> FastAPI:
     app.include_router(test_case_router, prefix="/api/v1")
     app.include_router(test_execution_router, prefix="/api/v1")
     app.include_router(site_attribute_router, prefix="/api/v1")
+    app.include_router(test_suite_router, prefix="/api/v1")
 
     return app
 

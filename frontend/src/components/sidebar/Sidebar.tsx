@@ -39,6 +39,12 @@ export const Sidebar: React.FC = () => {
             {!isCollapsed && (backLabel || 'Back')}
           </button>
         )}
+        {siteTitle && !isCollapsed && (
+          <div className="mx-4 mb-2 px-3 py-1.5 bg-red-50 border border-red-100 rounded-md">
+            <p className="text-[10px] text-[#8B6E6E] font-medium uppercase tracking-wide leading-none mb-0.5">Site</p>
+            <p className="text-xs font-semibold text-[#fc0101] truncate leading-snug">{siteTitle}</p>
+          </div>
+        )}
       </div>
 
       {/* Navigation */}
@@ -80,12 +86,6 @@ export const Sidebar: React.FC = () => {
         ))}
       </nav>
 
-      {siteTitle && !isCollapsed && (
-        <div className="border-t border-border p-4 text-sm text-muted-foreground">
-          <div className="font-semibold text-red-500 text-lg truncate">{siteTitle}</div>{' '}
-          <div className="text-xs text-muted-foreground">Current Site</div>
-        </div>
-      )}
     </aside>
   )
 }

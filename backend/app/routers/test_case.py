@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, Path, status, Response
+from fastapi import APIRouter, Depends, Path, Query, status, Response
 from sqlalchemy.orm import Session
+from typing import List
 
 from app.config.database import get_db
 from app.middleware.auth_middleware import auth_required
 from shared_orm.models.user import User
+from shared_orm.models.test_case import TestCase
 from app.services.test_case_service import TestCaseService
 from app.schemas.test_case_schema import (
     TestCaseDetailResponse,
@@ -14,6 +16,23 @@ from app.schemas.test_case_schema import (
 router = APIRouter(prefix="/test-cases", tags=["Test Cases"])
 
 test_case_service = TestCaseService()
+
+
+# -----------------------------------
+# List Test Cases by Scenario
+# -----------------------------------
+@router.get(
+    "",
+    response_model=List[TestCaseDetailResponse],
+    summary="List test cases by scenario"
+)
+def list_test_cases_by_scenario(
+    scenario_id: int = Query(..., description="Filter by test scenario ID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_required),
+):
+    """Return all test cases belonging to a given test scenario."""
+    return db.query(TestCase).filter(TestCase.test_scenario_id == scenario_id).all()
 
 # -----------------------------------
 # Create Test Case

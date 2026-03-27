@@ -6,9 +6,9 @@ from datetime import datetime
 class TestSuiteCreate(BaseModel):
     site_id: int
     title: str
-    description: str
-    status: str
-    flow_definition: Dict[str, Any]
+    description: Optional[str] = None
+    status: str = "draft"
+    flow_definition: Dict[str, Any] = {}
     scenario_count: Optional[int] = None
     test_case_count: Optional[int] = None
 
@@ -26,7 +26,7 @@ class TestSuiteResponse(BaseModel):
     id: int
     site_id: int
     title: str
-    description: str
+    description: Optional[str] = None
     status: str
     flow_definition: Dict[str, Any]
     scenario_count: Optional[int] = None
